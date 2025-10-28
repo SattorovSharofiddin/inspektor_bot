@@ -118,10 +118,10 @@ async def select_mahalla(callback: types.CallbackQuery, state: FSMContext):
     else:
         kb = types.InlineKeyboardMarkup(
             inline_keyboard=[
-                [types.InlineKeyboardButton(text="➕ Uchaskavoy qo‘shish", callback_data=f"adm_add_{mahalla_id}")]
+                [types.InlineKeyboardButton(text="➕ Profilaktika inspektorini qo‘shish", callback_data=f"adm_add_{mahalla_id}")]
             ]
         )
-        await callback.message.edit_text("Bu mahallada uchaskavoy yo‘q.", reply_markup=kb)
+        await callback.message.edit_text("Bu mahallada Profilaktika inspektori yo‘q.", reply_markup=kb)
 
 
 # --- Qo‘shish jarayoni ---
@@ -133,7 +133,7 @@ async def start_add_uchaskavoy(callback: types.CallbackQuery, state: FSMContext)
     mahalla_id = int(callback.data.split("_")[2])
     await state.update_data(mahalla_id=mahalla_id)
     await state.set_state(AddUchaskavoy.waiting_fio)
-    await callback.message.answer("👤 Uchaskavoyning F.I.O.sini kiriting:")
+    await callback.message.answer("👤 Profilaktika inspektori F.I.O.sini kiriting:")
 
 
 @router.message(AddUchaskavoy.waiting_fio)
@@ -160,7 +160,7 @@ async def add_get_tg_id(message: types.Message, state: FSMContext):
         mahalla_id=data["mahalla_id"]
     )
     await state.clear()
-    await message.answer("✅ Uchaskavoy muvaffaqiyatli qo‘shildi!")
+    await message.answer("✅ Profilaktika inspektori muvaffaqiyatli qo‘shildi!")
 
 
 # --- O‘zgartirish jarayoni ---
@@ -172,7 +172,7 @@ async def start_edit_uchaskavoy(callback: types.CallbackQuery, state: FSMContext
     mahalla_id = int(callback.data.split("_")[2])
     uchaskavoy = get_uchaskavoy_by_mahalla(mahalla_id)
     if not uchaskavoy:
-        await callback.message.answer("Uchaskavoy topilmadi.")
+        await callback.message.answer("Profilaktika inspektori topilmadi.")
         return
 
     await state.update_data(mahalla_id=mahalla_id)
@@ -204,7 +204,7 @@ async def edit_get_tg_id(message: types.Message, state: FSMContext):
         tg_id=int(message.text)
     )
     await state.clear()
-    await message.answer("✅ Uchaskavoy ma’lumotlari yangilandi!")
+    await message.answer("✅ Profilaktika inspektori yangilandi!")
 
 
 # --- O‘chirish ---
@@ -215,4 +215,4 @@ async def delete_uchaskavoy_cb(callback: types.CallbackQuery):
 
     mahalla_id = int(callback.data.split("_")[2])
     delete_uchaskavoy(mahalla_id)
-    await callback.message.answer("🗑 Uchaskavoy o‘chirildi.")
+    await callback.message.answer("Profilaktika inspektori o‘chirildi.")

@@ -24,7 +24,7 @@ async def user_start(message: types.Message, state: FSMContext):
     if role == "uchaskavoy":
         uchaskavoy = get_uchaskavoy_by_tg_id(message.from_user.id)
         if not uchaskavoy:
-            await message.answer("Siz uchaskavoy sifatida ro'yxatdan o'tmagansiz.")
+            await message.answer("Siz profilaktika inspektori sifatida ro'yxatdan o'tmagansiz.")
             return
 
         kb = InlineKeyboardBuilder()
@@ -32,7 +32,7 @@ async def user_start(message: types.Message, state: FSMContext):
 
         await message.answer(
             f"Assalomu alaykum, <b>{uchaskavoy[1]}</b>!\n"
-            f"Siz <b>{uchaskavoy[3]}</b> mahallasi uchaskavoyi ekansiz.",
+            f"Siz <b>{uchaskavoy[3]}</b> mahallasi profilaktika inspektori ekansiz.",
             reply_markup=kb.as_markup()
         )
 
@@ -48,7 +48,7 @@ async def user_start(message: types.Message, state: FSMContext):
 async def show_murojaatlar(callback: types.CallbackQuery):
     uchaskavoy = get_uchaskavoy_by_tg_id(callback.from_user.id)
     if not uchaskavoy:
-        await callback.answer("Siz uchaskavoy emassiz ❌", show_alert=True)
+        await callback.answer("Siz profilaktika inspektori emassiz ❌", show_alert=True)
         return
 
     data = get_murojaatlar_by_uchaskavoy(uchaskavoy[0])
@@ -67,7 +67,7 @@ async def show_murojaatlar(callback: types.CallbackQuery):
 async def show_user_murojaatlar(callback: types.CallbackQuery):
     uchaskavoy = get_uchaskavoy_by_tg_id(callback.from_user.id)
     if not uchaskavoy:
-        await callback.answer("❌ Siz uchaskavoy emassiz", show_alert=True)
+        await callback.answer("❌ Siz profilaktika inspektori", show_alert=True)
         return
 
     user_id = int(callback.data.split(":")[1])
@@ -115,7 +115,7 @@ async def show_user_murojaatlar(callback: types.CallbackQuery):
         elif content_type == "video":
             await callback.message.answer_video(
                 video=content,
-                caption=f"🎥 <b>Videomurojaat</b>\n\n{caption_text}",
+                caption=f"🎥 <b>Video murojaat</b>\n\n{caption_text}",
                 parse_mode="HTML",
                 reply_markup=markup
             )
