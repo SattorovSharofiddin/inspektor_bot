@@ -1,5 +1,5 @@
 from aiogram import Router, types
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import Command, StateFilter, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, Message
@@ -26,6 +26,20 @@ contact_location_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+uchaskavoy_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [
+            KeyboardButton(text="📩 Murojaatlar"),
+            KeyboardButton(text="📝 Xabar yuborish")
+        ],
+        [
+            KeyboardButton(text="🔄 Yangilash")
+        ]
+    ],
+    resize_keyboard=True,
+    input_field_placeholder="Kerakli bo‘limni tanlang..."
+)
+
 
 class UchaskavoySendMessage(StatesGroup):
     waiting_content = State()
@@ -35,24 +49,22 @@ class UchaskavoyReply(StatesGroup):
     waiting_reply = State()
 
 
-@router.message(Command("start"))
+# === 🟢 START buyrug'i ===
+@router.message(CommandStart())
 async def user_start(message: types.Message, state: FSMContext):
     role = get_user_role(message.from_user.id)
 
     if role == "uchaskavoy":
         uchaskavoy = get_uchaskavoy_by_tg_id(message.from_user.id)
         if not uchaskavoy:
-            await message.answer("Siz profilaktika inspektori sifatida ro'yxatdan o'tmagansiz.")
+            await message.answer("❌ Siz uchaskavoy sifatida ro‘yxatdan o‘tmagansiz.")
             return
 
-        kb = InlineKeyboardBuilder()
-        kb.button(text="📩 Murojaatlar", callback_data="show_murojaatlar")
-        kb.button(text="📝 Xabar yuborish", callback_data="send_message")  # <-- Yangi tugma
-
         await message.answer(
-            f"Assalomu alaykum, <b>{uchaskavoy[1]}</b>!\n"
-            f"Siz <b>{uchaskavoy[3]}</b> mahallasi profilaktika inspektori ekansiz.",
-            reply_markup=kb.as_markup()
+            f"👮‍♂️ Assalomu alaykum, <b>{uchaskavoy[1]}</b>!\n"
+            f"Siz <b>{uchaskavoy[3]}</b> mahallasi profilaktika inspektorisiz.",
+            reply_markup=uchaskavoy_menu,
+            parse_mode="HTML"
         )
 
     elif role == "admin":
@@ -62,19 +74,40 @@ async def user_start(message: types.Message, state: FSMContext):
         await cmd_start(message, state)
 
 
-@router.callback_query(lambda c: c.data == "send_message")
-async def send_message_start(callback: types.CallbackQuery, state: FSMContext):
-    uchaskavoy = get_uchaskavoy_by_tg_id(callback.from_user.id)
+# 🔹 Yangilash tugmasi
+@router.message(lambda message: message.text == "🔄 Yangilash")
+async def refresh_panel(message: types.Message):
+    uchaskavoy = get_uchaskavoy_by_tg_id(message.from_user.id)
     if not uchaskavoy:
-        await callback.answer("❌ Siz uchaskavoy sifatida ro'yxatdan o'tmagansiz.", show_alert=True)
+        await message.answer("❌ Siz uchaskavoy sifatida ro‘yxatdan o‘tmagansiz.")
         return
 
-    await callback.message.answer(
-        "📨 Yubormoqchi bo‘lgan xabaringizni yuboring.\n"
-        "Matn, rasm, video, audio yoki hujjat yuborishingiz mumkin."
+    await message.answer(
+        f"🔄 Panel yangilandi!\n\n"
+        f"👮‍♂️ <b>{uchaskavoy[1]}</b>\n"
+        f"🏘 Mahalla: <b>{uchaskavoy[3]}</b>",
+        reply_markup=uchaskavoy_menu,
+        parse_mode="HTML"
     )
+
+
+@router.message(lambda message: message.text == "📝 Xabar yuborish")
+async def start_sending_message(message: types.Message, state: FSMContext):
+    uchaskavoy = get_uchaskavoy_by_tg_id(message.from_user.id)
+    if not uchaskavoy:
+        await message.answer("❌ Siz uchaskavoy sifatida ro‘yxatdan o‘tmagansiz.")
+        return
+
+    await message.answer(
+        "📨 Yubormoqchi bo‘lgan xabaringizni yuboring.\n"
+        "Matn, rasm, video, audio yoki hujjat yuborishingiz mumkin.",
+        # ❌ Bu joyni olib tashlaymiz:
+        # reply_markup=types.ReplyKeyboardRemove()
+        # ✅ o‘rniga menyuni qayta qo‘yamiz:
+        reply_markup=uchaskavoy_menu
+    )
+
     await state.set_state(UchaskavoySendMessage.waiting_content)
-    await callback.answer()
 
 
 # 🔹 FSM: Xabarni qabul qilish va barcha fuqarolarga yuborish
@@ -137,7 +170,7 @@ async def process_message(message: Message, state: FSMContext):
             content=content
         )
 
-    await message.answer(f"✅ Xabar {sent_count} fuqaro/guruhga yuborildi")
+    await message.answer(f"✅ Xabar {sent_count} fuqaroga yuborildi")
     await state.clear()
 
 
@@ -154,46 +187,38 @@ async def reply_to_message(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data == "show_murojaatlar")
-async def show_murojaatlar(callback: types.CallbackQuery):
-    """Uchaskavoyga murojaat yuborgan fuqarolar ro‘yxatini ko‘rsatadi"""
-    uchaskavoy = get_uchaskavoy_by_tg_id(callback.from_user.id)
+@router.message(lambda message: message.text == "📩 Murojaatlar")
+async def show_murojaatlar_menu(message: types.Message):
+    uchaskavoy = get_uchaskavoy_by_tg_id(message.from_user.id)
     if not uchaskavoy:
-        await callback.answer("Siz profilaktika inspektori emassiz ❌", show_alert=True)
+        await message.answer("❌ Siz uchaskavoy sifatida ro‘yxatdan o‘tmagansiz.")
         return
 
-    # 🔹 Ushbu uchaskavoyga tegishli murojaatlar
     data = get_murojaatlar_by_uchaskavoy(uchaskavoy[0])
     if not data:
-        await callback.message.answer("📭 Hozircha hech kim murojaat yubormagan.")
+        await message.answer("📭 Hozircha hech kim murojaat yubormagan.")
         return
 
-    # data tuzilmasi: [(foydalanuvchi_nick, foydalanuvchi_id), ...]
+    # Inline tugmalar bilan foydalanuvchilarni chiqaramiz
     buttons = []
     row = []
-
     for i, user in enumerate(data, start=1):
         foydalanuvchi_nick = user[0] if user[0] else "Noma’lum"
         foydalanuvchi_id = user[1]
         row.append(
-            types.InlineKeyboardButton(
+            InlineKeyboardButton(
                 text=f"👤 {foydalanuvchi_nick[:10]}",
                 callback_data=f"show_user_murojaatlar:{foydalanuvchi_id}"
             )
         )
-        # 🔹 Har 2 ta tugmadan keyin yangi qatordan boshlaymiz
         if i % 2 == 0:
             buttons.append(row)
             row = []
-
-    # Agar oxirida bitta tugma qolsa, uni ham qo‘shamiz
     if row:
         buttons.append(row)
 
-    keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
-
-    await callback.message.answer("📋 <b>Murojaat yuborganlar:</b>", parse_mode="HTML", reply_markup=keyboard)
-    await callback.answer()
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.answer("📋 <b>Murojaat yuborganlar:</b>", parse_mode="HTML", reply_markup=keyboard)
 
 
 @router.callback_query(lambda c: c.data.startswith("show_user_murojaatlar:"))
