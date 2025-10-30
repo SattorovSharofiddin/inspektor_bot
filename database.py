@@ -447,7 +447,7 @@ def get_fuqarolar_by_uchaskavoy(uchaskavoy_id):
 
     # Endi shu mahalladagi role = NULL bo‘lgan fuqarolarni qaytaramiz
     c.execute("""
-              SELECT id, fio
+              SELECT id, fio, tg_id
               FROM uchaskavoy
               WHERE mahalla_id = ?
                 AND (role IS NULL OR role = '')
