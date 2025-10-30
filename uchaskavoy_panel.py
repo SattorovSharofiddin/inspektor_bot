@@ -141,25 +141,6 @@ async def process_message(message: Message, state: FSMContext):
     await state.clear()
 
 
-@router.callback_query(lambda c: c.data == "show_murojaatlar")
-async def show_murojaatlar(callback: types.CallbackQuery):
-    uchaskavoy = get_uchaskavoy_by_tg_id(callback.from_user.id)
-    if not uchaskavoy:
-        await callback.answer("Siz profilaktika inspektori emassiz ❌", show_alert=True)
-        return
-
-    data = get_murojaatlar_by_uchaskavoy(uchaskavoy[0])
-    if not data:
-        await callback.message.answer("Hozircha hech kim murojaat yubormagan.")
-        return
-
-    kb = InlineKeyboardBuilder()
-    for user_id in data:
-        kb.button(text=f"👤 {user_id[0]}", callback_data=f"toggle_status:{user_id[1]}")
-
-    await callback.message.answer("Murojaat yuborganlar:", reply_markup=kb.as_markup())
-
-
 @router.callback_query(lambda c: c.data.startswith("reply_to:"))
 async def reply_to_message(callback: types.CallbackQuery, state: FSMContext):
     murojaat_id = int(callback.data.split(":")[1])
@@ -173,108 +154,310 @@ async def reply_to_message(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data.startswith("toggle_status:"))
-async def toggle_murojaat_status(callback: types.CallbackQuery):
+@router.callback_query(lambda c: c.data == "show_murojaatlar")
+async def show_murojaatlar(callback: types.CallbackQuery):
+    """Uchaskavoyga murojaat yuborgan fuqarolar ro‘yxatini ko‘rsatadi"""
+    uchaskavoy = get_uchaskavoy_by_tg_id(callback.from_user.id)
+    if not uchaskavoy:
+        await callback.answer("Siz profilaktika inspektori emassiz ❌", show_alert=True)
+        return
+
+    # 🔹 Ushbu uchaskavoyga tegishli murojaatlar
+    data = get_murojaatlar_by_uchaskavoy(uchaskavoy[0])
+    if not data:
+        await callback.message.answer("📭 Hozircha hech kim murojaat yubormagan.")
+        return
+
+    # data tuzilmasi: [(foydalanuvchi_nick, foydalanuvchi_id), ...]
+    buttons = []
+    row = []
+
+    for i, user in enumerate(data, start=1):
+        foydalanuvchi_nick = user[0] if user[0] else "Noma’lum"
+        foydalanuvchi_id = user[1]
+        row.append(
+            types.InlineKeyboardButton(
+                text=f"👤 {foydalanuvchi_nick[:10]}",
+                callback_data=f"show_user_murojaatlar:{foydalanuvchi_id}"
+            )
+        )
+        # 🔹 Har 2 ta tugmadan keyin yangi qatordan boshlaymiz
+        if i % 2 == 0:
+            buttons.append(row)
+            row = []
+
+    # Agar oxirida bitta tugma qolsa, uni ham qo‘shamiz
+    if row:
+        buttons.append(row)
+
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    await callback.message.answer("📋 <b>Murojaat yuborganlar:</b>", parse_mode="HTML", reply_markup=keyboard)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data.startswith("show_user_murojaatlar:"))
+async def show_user_murojaatlar(callback: types.CallbackQuery):
     foydalanuvchi_id = int(callback.data.split(":")[1])
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-
     c.execute("""
-              SELECT id, foydalanuvchi_id, turi, content, holat, telefon, location
+              SELECT id, foydalanuvchi_nick, turi, content, holat, telefon, location
               FROM murojaatlar
               WHERE foydalanuvchi_id = ?
+              ORDER BY id DESC
               """, (foydalanuvchi_id,))
+    murojaatlar = c.fetchall()
+    conn.close()
+
+    if not murojaatlar:
+        await callback.message.answer("❌ Bu foydalanuvchi hech qanday murojaat yubormagan.")
+        await callback.answer()
+        return
+
+    for row in murojaatlar:
+        murojaat_id, nick, turi, content, holat, telefon, location = row
+
+        # button matnini hozirgi holatga qarab aniqlaymiz:
+        # agar hozir 'kutilmoqda' bo'lsa — tugma "✅ Bajarildi" bo'ladi (ya'ni bosilganda bajarildi ga o'tadi)
+        # agar hozir 'bajarildi' bo'lsa — tugma "🕓 Kutilmoqda" bo'ladi
+        if holat == "kutilmoqda":
+            button_text = "✅ Bajarildi"
+        else:
+            button_text = "🕓 Kutilmoqda"
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text=button_text, callback_data=f"toggle_status:{murojaat_id}")
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="💬 Javob berish",
+                        callback_data=f"reply_to:{murojaat_id}"
+                    )
+                ]
+            ]
+        )
+
+        # Qo'shimcha ma'lumotlar
+        info_text = f"<b>👤 Foydalanuvchi:</b> {nick}\n"
+        if telefon:
+            info_text += f"<b>📞 Telefon:</b> <a href='tel:{telefon}'>{telefon}</a>\n"
+        if location:
+            try:
+                lat, lon = location.split(",")
+                info_text += f"<b>📍 Joylashuv:</b> <a href='https://maps.google.com/?q={lat},{lon}'>Ko‘rish</a>\n"
+            except:
+                pass
+
+        info_text += f"\n<b>Holat:</b> {holat.capitalize()}\n__________________"
+
+        try:
+            if turi == "text":
+                await callback.message.answer(
+                    f"📝 Murojaat:\n\n{content}\n\n{info_text}",
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+            elif turi == "photo":
+                await callback.message.answer_photo(photo=content, caption=info_text, parse_mode="HTML",
+                                                    reply_markup=keyboard)
+            elif turi == "video":
+                await callback.message.answer_video(video=content, caption=info_text, parse_mode="HTML",
+                                                    reply_markup=keyboard)
+            elif turi == "document":
+                await callback.message.answer_document(document=content, caption=info_text, parse_mode="HTML",
+                                                       reply_markup=keyboard)
+            elif turi == "voice":
+                await callback.message.answer_voice(voice=content, caption=info_text, parse_mode="HTML",
+                                                    reply_markup=keyboard)
+            else:
+                # agar noma'lum turi bo'lsa, matn sifatida yuboramiz
+                await callback.message.answer(f"{content}\n\n{info_text}", parse_mode="HTML", reply_markup=keyboard)
+        except Exception as e:
+            await callback.message.answer(f"⚠️ Xabar yuborishda xatolik: {e}")
+
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data.startswith("toggle_status:"))
+async def toggle_status(callback: types.CallbackQuery):
+    # callback.data = "toggle_status:<murojaat_id>"
+    try:
+        murojaat_id = int(callback.data.split(":")[1])
+    except:
+        await callback.answer("❌ Noto'g'ri ma'lumot.")
+        return
+
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("""
+              SELECT id, foydalanuvchi_nick, turi, content, holat, telefon, location
+              FROM murojaatlar
+              WHERE id = ?
+              """, (murojaat_id,))
     row = c.fetchone()
 
     if not row:
-        await callback.answer("❌ Murojaat topilmadi.")
         conn.close()
+        await callback.answer("❌ Murojaat topilmadi.")
         return
 
-    murojaat_id, foydalanuvchi_id, turi, content, holat, telefon, location = row
+    _id, nick, turi, content, holat, telefon, location = row
 
-    # 🔹 Holatni o‘zgartirish
+    # yangi holat — teskari:
     yangi_holat = "bajarildi" if holat == "kutilmoqda" else "kutilmoqda"
     c.execute("UPDATE murojaatlar SET holat = ? WHERE id = ?", (yangi_holat, murojaat_id))
     conn.commit()
     conn.close()
 
-    # 🔹 Tugmalar: holat + javob berish
+    # tugma matnini yangi holatga qarab aniqlaymiz (tugma bosilganda keyingi amal bo'lishi kerak)
+    if yangi_holat == "kutilmoqda":
+        button_text = "✅ Bajarildi"  # agar hozir kutilmoqda bo'lsa, tugma bosilganda bajarildi kerak
+    else:
+        button_text = "🕓 Kutilmoqda"
+
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text="🕓 Kutilmoqda" if yangi_holat == "bajarildi" else "✅ Bajarildi",
-                callback_data=f"toggle_status:{foydalanuvchi_id}"
-            )],
-            [InlineKeyboardButton(
-                text="💬 Javob berish",
-                callback_data=f"reply_to:{murojaat_id}"
-            )]
+            [InlineKeyboardButton(text=button_text, callback_data=f"toggle_status:{murojaat_id}")],
+            [InlineKeyboardButton(text="💬 Javob berish", callback_data=f"reply_to:{murojaat_id}")]
         ]
     )
 
-    info_text = f"<b>Holat:</b> {yangi_holat.capitalize()}"
+    # yangilangan info text
+    info_text = f"<b>👤 Foydalanuvchi:</b> {nick}\n"
+    if telefon:
+        info_text += f"<b>📞 Telefon:</b> <a href='tel:{telefon}'>{telefon}</a>\n"
+    if location:
+        try:
+            lat, lon = location.split(",")
+            info_text += f"<b>📍 Joylashuv:</b> <a href='https://maps.google.com/?q={lat},{lon}'>Ko‘rish</a>\n"
+        except:
+            pass
+    info_text += f"\n<b>Holat:</b> {yangi_holat.capitalize()}\n__________________"
+
+    # Xabarni joyida yangilashga harakat qilamiz
     try:
         if turi == "text":
-            await callback.message.edit_text(
-                f"📝 Murojaat:\n\n{content}\n\n{info_text}",
-                parse_mode="HTML",
-                reply_markup=keyboard
-            )
+            await callback.message.edit_text(f"📝 Murojaat:\n\n{content}\n\n{info_text}", parse_mode="HTML",
+                                             reply_markup=keyboard)
         else:
-            await callback.message.edit_caption(
-                caption=f"{info_text}",
-                parse_mode="HTML",
-                reply_markup=keyboard
-            )
-    except Exception:
-        await callback.message.answer(f"🔄 Yangilangan murojaat\n\n{info_text}", reply_markup=keyboard)
+            # agar media bo'lsa, captionni o'zgartirishga harakat qilamiz
+            await callback.message.edit_caption(caption=info_text, parse_mode="HTML", reply_markup=keyboard)
+    except Exception as e:
+        # ba'zi holatlarda edit_caption yoki edit_text ishlamasligi mumkin (eskirgan xabar),
+        # lekin biz yangi xabar yubormaslikka harakat qilamiz — shuning uchun fallbackda faqat notify qilamiz
+        await callback.answer("🔄 Holat yangilandi (xabarni tahrirlash imkoni bo'lmadi).")
+        return
 
     await callback.answer(f"✅ Holat '{yangi_holat}' deb o‘zgartirildi.")
 
-
-@router.message(StateFilter(UchaskavoyReply.waiting_reply))
-async def process_reply(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    murojaat_id = data.get("murojaat_id")
-    if not murojaat_id:
-        await message.answer("❌ Murojaat topilmadi.")
-        await state.clear()
-        return
-
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT foydalanuvchi_id FROM murojaatlar WHERE id = ?", (murojaat_id,))
-    row = c.fetchone()
-    if not row:
-        await message.answer("❌ Murojaatchi topilmadi.")
-        conn.close()
-        await state.clear()
-        return
-
-    foydalanuvchi_id = row[0]
-
-    # 🔹 Javobni yuborish
-    try:
-        if message.text:
-            await message.bot.send_message(foydalanuvchi_id, f"💬 Uchaskavoy javobi:\n\n{message.text}")
-        elif message.photo:
-            await message.bot.send_photo(foydalanuvchi_id, message.photo[-1].file_id,
-                                         caption=message.caption or "💬 Uchaskavoy javobi")
-        elif message.video:
-            await message.bot.send_video(foydalanuvchi_id, message.video.file_id,
-                                         caption=message.caption or "💬 Uchaskavoy javobi")
-        elif message.document:
-            await message.bot.send_document(foydalanuvchi_id, message.document.file_id,
-                                            caption=message.caption or "💬 Uchaskavoy javobi")
-        elif message.voice:
-            await message.bot.send_voice(foydalanuvchi_id, message.voice.file_id,
-                                         caption=message.caption or "💬 Uchaskavoy javobi")
-        elif message.location:
-            await message.bot.send_location(foydalanuvchi_id, message.location.latitude, message.location.longitude)
-    except Exception as e:
-        await message.answer(f"❌ Javob yuborishda xatolik yuz berdi: {e}")
-
-    await message.answer("✅ Javob muvaffaqiyatli yuborildi.")
-    await state.clear()
+# @router.callback_query(lambda c: c.data.startswith("toggle_status:"))
+# async def toggle_murojaat_status(callback: types.CallbackQuery):
+#     import sqlite3
+#     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+#     from database import DB_NAME
+#
+#     murojaat_id = int(callback.data.split(":")[1])
+#
+#     conn = sqlite3.connect(DB_NAME)
+#     c = conn.cursor()
+#     c.execute("""
+#         SELECT foydalanuvchi_id, turi, content, holat, telefon, location
+#         FROM murojaatlar
+#         WHERE id = ?
+#     """, (murojaat_id,))
+#     row = c.fetchone()
+#
+#     if not row:
+#         await callback.answer("❌ Murojaat topilmadi.")
+#         conn.close()
+#         return
+#
+#     foydalanuvchi_id, turi, content, holat, telefon, location = row
+#     yangi_holat = "bajarildi" if holat == "kutilmoqda" else "kutilmoqda"
+#
+#     # Holatni yangilash
+#     c.execute("UPDATE murojaatlar SET holat = ? WHERE id = ?", (yangi_holat, murojaat_id))
+#     conn.commit()
+#
+#     # F.I.Sh. ni uchaskavoy jadvalidan olish
+#     c.execute("SELECT fio FROM uchaskavoy WHERE id = ?", (foydalanuvchi_id,))
+#     row2 = c.fetchone()
+#     conn.close()
+#
+#     fio = row2[0] if row2 else "Noma’lum fuqaro"
+#
+#     # Tugma yaratish
+#     button_text = "🕓 Kutilmoqda" if yangi_holat == "bajarildi" else "✅ Bajarildi"
+#     holat_emoji = "✅" if yangi_holat == "bajarildi" else "🕓"
+#
+#     keyboard = InlineKeyboardMarkup(
+#         inline_keyboard=[
+#             [InlineKeyboardButton(text=button_text, callback_data=f"toggle_status:{murojaat_id}")]
+#         ]
+#     )
+#
+#     # 🔹 Telefon va lokatsiyani qo‘shish
+#     info_text = f"<b>👤 F.I.Sh.:</b> {fio}\n"
+#     if telefon:
+#         info_text += f"<b>📞 Telefon:</b> <a href='tel:{telefon}'>{telefon}</a>\n"
+#     if location:
+#         try:
+#             lat, lon = location.split(",")
+#             info_text += f"<b>📍 Joylashuv:</b> <a href='https://maps.google.com/?q={lat},{lon}'>Ko‘rish</a>\n"
+#         except:
+#             pass
+#
+#     info_text += f"\n<b>{holat_emoji} Holat:</b> <i>{yangi_holat.capitalize()}</i>\n───────────────"
+#
+#     # 🔸 Kontent turiga qarab xabarni yangilash
+#     try:
+#         if turi == "text":
+#             await callback.message.edit_text(
+#                 f"📝 <b>Matnli murojaat:</b>\n\n{content}\n\n{info_text}",
+#                 parse_mode="HTML",
+#                 reply_markup=keyboard
+#             )
+#         elif turi == "photo":
+#             await callback.message.edit_caption(
+#                 caption=f"📸 <b>Rasmli murojaat</b>\n\n{info_text}",
+#                 parse_mode="HTML",
+#                 reply_markup=keyboard
+#             )
+#         elif turi == "video":
+#             await callback.message.edit_caption(
+#                 caption=f"🎥 <b>Videomurojaat</b>\n\n{info_text}",
+#                 parse_mode="HTML",
+#                 reply_markup=keyboard
+#             )
+#         elif turi == "document":
+#             await callback.message.edit_caption(
+#                 caption=f"📄 <b>Fayl murojaat</b>\n\n{info_text}",
+#                 parse_mode="HTML",
+#                 reply_markup=keyboard
+#             )
+#         elif turi == "voice":
+#             await callback.message.edit_caption(
+#                 caption=f"🎙 <b>Ovozli murojaat</b>\n\n{info_text}",
+#                 parse_mode="HTML",
+#                 reply_markup=keyboard
+#             )
+#         elif turi == "location":
+#             lat2, lon2 = map(float, content.split(","))
+#             await callback.message.answer_location(latitude=lat2, longitude=lon2)
+#             await callback.message.answer(
+#                 f"📍 <b>Joylashuv yuborildi</b>\n\n{info_text}",
+#                 parse_mode="HTML",
+#                 reply_markup=keyboard
+#             )
+#     except Exception:
+#         await callback.message.answer(
+#             f"🔄 <b>Yangilangan murojaat</b>\n\n{info_text}",
+#             parse_mode="HTML",
+#             reply_markup=keyboard
+#         )
+#
+#     await callback.answer(f"✅ Holat '{yangi_holat}' deb o‘zgartirildi.")
