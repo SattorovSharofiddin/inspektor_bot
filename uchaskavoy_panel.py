@@ -110,6 +110,7 @@ async def start_sending_message(message: types.Message, state: FSMContext):
     await state.set_state(UchaskavoySendMessage.waiting_content)
 
 
+
 # 🔹 FSM: Xabarni qabul qilish va barcha fuqarolarga yuborish
 @router.message(StateFilter(UchaskavoySendMessage.waiting_content))
 async def process_message(message: Message, state: FSMContext):
