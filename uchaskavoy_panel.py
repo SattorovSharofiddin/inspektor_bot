@@ -137,7 +137,7 @@ async def process_message(message: Message, state: FSMContext):
             content=content
         )
 
-    await message.answer(f"✅ Xabar {sent_count} fuqaroga yuborildi")
+    await message.answer(f"✅ Xabar {sent_count} fuqaro/guruhga yuborildi")
     await state.clear()
 
 
@@ -158,6 +158,19 @@ async def show_murojaatlar(callback: types.CallbackQuery):
         kb.button(text=f"👤 {user_id[0]}", callback_data=f"toggle_status:{user_id[1]}")
 
     await callback.message.answer("Murojaat yuborganlar:", reply_markup=kb.as_markup())
+
+
+@router.callback_query(lambda c: c.data.startswith("reply_to:"))
+async def reply_to_message(callback: types.CallbackQuery, state: FSMContext):
+    murojaat_id = int(callback.data.split(":")[1])
+    await state.update_data(murojaat_id=murojaat_id)
+    await callback.message.answer(
+        "✉️ Iltimos, murojaatchiga yubormoqchi bo‘lgan javobingizni kiriting.\n"
+        "Matn, rasm, video, audio yoki hujjat yuborishingiz mumkin."
+    )
+    # ❌ await UchaskavoyReply.waiting_reply.set()
+    await state.set_state(UchaskavoyReply.waiting_reply)  # ✅ Shu tarzda
+    await callback.answer()
 
 
 @router.callback_query(lambda c: c.data.startswith("toggle_status:"))
@@ -221,19 +234,6 @@ async def toggle_murojaat_status(callback: types.CallbackQuery):
     await callback.answer(f"✅ Holat '{yangi_holat}' deb o‘zgartirildi.")
 
 
-@router.callback_query(lambda c: c.data.startswith("reply_to:"))
-async def reply_to_message(callback: types.CallbackQuery, state: FSMContext):
-    murojaat_id = int(callback.data.split(":")[1])
-    await state.update_data(murojaat_id=murojaat_id)
-    await callback.message.answer(
-        "✉️ Iltimos, murojaatchiga yubormoqchi bo‘lgan javobingizni kiriting.\n"
-        "Matn, rasm, video, audio yoki hujjat yuborishingiz mumkin."
-    )
-    # ❌ await UchaskavoyReply.waiting_reply.set()
-    await state.set_state(UchaskavoyReply.waiting_reply)  # ✅ Shu tarzda
-    await callback.answer()
-
-
 @router.message(StateFilter(UchaskavoyReply.waiting_reply))
 async def process_reply(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -278,109 +278,3 @@ async def process_reply(message: types.Message, state: FSMContext):
 
     await message.answer("✅ Javob muvaffaqiyatli yuborildi.")
     await state.clear()
-
-# @router.callback_query(lambda c: c.data.startswith("user_murojaat:"))
-# async def show_user_murojaatlar(callback: types.CallbackQuery):
-#     uchaskavoy = get_uchaskavoy_by_tg_id(callback.from_user.id)
-#     if not uchaskavoy:
-#         await callback.answer("❌ Siz profilaktika inspektori emassiz", show_alert=True)
-#         return
-#
-#     user_id = int(callback.data.split(":")[1])
-#
-#     # 🧩 1. Foydalanuvchi ma’lumotlarini olish
-#     conn = sqlite3.connect(DB_NAME)
-#     c = conn.cursor()
-#     c.execute("""
-#               SELECT fio, telefon, lat, lon
-#               FROM uchaskavoy
-#               WHERE id = ?
-#               """, (user_id,))
-#     user_info = c.fetchone()
-#     conn.close()
-#
-#     if not user_info:
-#         await callback.message.answer("Fuqaro ma’lumotlari topilmadi.")
-#         return
-#
-#     fio, telefon, lat, lon = user_info
-#
-#     # 🧩 2. Foydalanuvchining murojaatlarini olish
-#     murojaatlar = get_murojaatlar_by_user(user_id, uchaskavoy[0])
-#     if not murojaatlar:
-#         await callback.message.answer(f"👤 {fio} tomonidan hali murojaatlar yo‘q.")
-#         return
-#
-#     # 🧩 3. Har bir murojaatni yuborish
-#     for murojaat_id, content_type, content, holat in murojaatlar:
-#         if holat == "kutilmoqda":
-#             button_text = "✅ Bajarildi"
-#             new_status = "bajarildi"
-#             holat_emoji = "🕓"
-#         else:
-#             button_text = "🕓 Kutilmoqda"
-#             new_status = "kutilmoqda"
-#             holat_emoji = "✅"
-#
-#         markup = InlineKeyboardMarkup(inline_keyboard=[
-#             [InlineKeyboardButton(text=button_text, callback_data=f"toggle_status:{murojaat_id}:{new_status}")]
-#         ])
-#
-#         # 📋 Foydalanuvchi haqida ma’lumotlar
-#         info_text = (
-#             f"<b>👤 F.I.Sh.:</b> {fio}\n"
-#             f"<b>📞 Telefon:</b> <a href='tel:{telefon}'>{telefon}</a>\n"
-#             f"<b>📍 Joylashuv:</b> {lat}, {lon}\n\n"
-#             f"<b>{holat_emoji} Holat:</b> <i>{holat.capitalize()}</i>\n"
-#             f"────────────────────"
-#         )
-#
-#         # 📦 Kontent turiga qarab yuborish
-#         if content_type == "text":
-#             await callback.message.answer(
-#                 f"📝 <b>Matnli murojaat:</b>\n\n{content}\n\n{info_text}",
-#                 parse_mode="HTML",
-#                 disable_web_page_preview=True,
-#                 reply_markup=markup
-#             )
-#
-#         elif content_type == "photo":
-#             await callback.message.answer_photo(
-#                 photo=content,
-#                 caption=f"📸 <b>Rasmli murojaat</b>\n\n{info_text}",
-#                 parse_mode="HTML",
-#                 reply_markup=markup
-#             )
-#
-#         elif content_type == "video":
-#             await callback.message.answer_video(
-#                 video=content,
-#                 caption=f"🎥 <b>Videomurojaat</b>\n\n{info_text}",
-#                 parse_mode="HTML",
-#                 reply_markup=markup
-#             )
-#
-#         elif content_type == "document":
-#             await callback.message.answer_document(
-#                 document=content,
-#                 caption=f"📄 <b>Fayl murojaat</b>\n\n{info_text}",
-#                 parse_mode="HTML",
-#                 reply_markup=markup
-#             )
-#
-#         elif content_type == "voice":
-#             await callback.message.answer_voice(
-#                 voice=content,
-#                 caption=f"🎙 <b>Ovozli murojaat</b>\n\n{info_text}",
-#                 parse_mode="HTML",
-#                 reply_markup=markup
-#             )
-#
-#         elif content_type == "location":
-#             lat2, lon2 = map(float, content.split(","))
-#             await callback.message.answer_location(latitude=lat2, longitude=lon2)
-#             await callback.message.answer(
-#                 f"📍 <b>Joylashuv yuborildi</b>\n\n{info_text}",
-#                 parse_mode="HTML",
-#                 reply_markup=markup
-#             )
