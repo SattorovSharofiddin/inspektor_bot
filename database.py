@@ -124,6 +124,10 @@ def create_tables():
                   TEXT,
                   content
                   TEXT,
+                  telefon
+                  TEXT,
+                  location
+                  TEXT,
                   FOREIGN
                   KEY
               (
@@ -267,12 +271,16 @@ def get_user_by_tg_id(tg_id):
 
 # --- MUROJAATLAR --- #
 
-def add_murojaat(foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content):
+def add_murojaat(foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, telefon=None, location=None):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute(
-        "INSERT INTO murojaatlar (foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content) VALUES (?, ?, ?, ?, ?)",
-        (foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content))
+
+    c.execute('''
+              INSERT INTO murojaatlar (foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, telefon,
+                                       location)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+              ''', (foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, telefon, location))
+
     conn.commit()
     conn.close()
 
@@ -285,6 +293,38 @@ def get_murojaatlar_by_uchaskavoy(uchaskavoy_id):
     foydalanuvchilar = [row for row in c.fetchall()]
     conn.close()
     return foydalanuvchilar
+
+
+# def get_murojaatlar_by_uchaskavoy(uchaskavoy_id):
+#     conn = sqlite3.connect(DB_NAME)
+#     c = conn.cursor()
+#     c.execute('''
+#         SELECT id, fio, murojaat_text, telefon, location
+#         FROM murojaatlar
+#         WHERE foydalanuvchi_id IN (
+#             SELECT id FROM uchaskavoy WHERE uchaskavoy_id = ?
+#         )
+#     ''', (uchaskavoy_id,))
+#     murojaatlar = c.fetchall()
+#     conn.close()
+#     return murojaatlar
+
+def get_foydalanuvchi_fio(tg_id):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT fio FROM uchaskavoy WHERE tg_id = ?", (tg_id,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else "Noma’lum fuqaro"
+
+
+def get_all_murojaatlar():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute('SELECT id, fio, murojaat_text, telefon, location FROM murojaatlar')
+    murojaatlar = c.fetchall()
+    conn.close()
+    return murojaatlar
 
 
 def get_murojaatlar_by_user(foydalanuvchi_id, uchaskavoy_id):
@@ -341,18 +381,18 @@ def get_user_region_data(tg_id):
     return data
 
 
-def add_murojaat(foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute(
-        """
-        INSERT INTO murojaatlar (foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, holat)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, "kutilmoqda")
-    )
-    conn.commit()
-    conn.close()
+# def add_murojaat(foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, telefon=None, location=None):
+#     conn = sqlite3.connect(DB_NAME)
+#     c = conn.cursor()
+#     c.execute(
+#         """
+#         INSERT INTO murojaatlar (foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, holat, telefon, location)
+#         VALUES (?, ?, ?, ?, ?, ?)
+#         """,
+#         (foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, "kutilmoqda", telefon, location)
+#     )
+#     conn.commit()
+#     conn.close()
 
 
 def add_fuqarolar(fio: str, telefon: str, tg_id: int, mahalla_id: int, role):

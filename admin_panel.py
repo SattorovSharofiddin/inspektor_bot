@@ -16,6 +16,16 @@ from database import (
 router = Router()
 
 
+# --- Klaviatura: Orqaga qaytish ---
+def cancel_kb():
+    return types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text="⬅️ Orqaga qaytish")]
+        ],
+        resize_keyboard=True
+    )
+
+
 # --- FSM: Uchaskavoy qo‘shish ---
 class AddUchaskavoy(StatesGroup):
     waiting_fio = State()
@@ -118,7 +128,8 @@ async def select_mahalla(callback: types.CallbackQuery, state: FSMContext):
     else:
         kb = types.InlineKeyboardMarkup(
             inline_keyboard=[
-                [types.InlineKeyboardButton(text="➕ Profilaktika inspektorini qo‘shish", callback_data=f"adm_add_{mahalla_id}")]
+                [types.InlineKeyboardButton(text="➕ Profilaktika inspektorini qo‘shish",
+                                            callback_data=f"adm_add_{mahalla_id}")]
             ]
         )
         await callback.message.edit_text("Bu mahallada Profilaktika inspektori yo‘q.", reply_markup=kb)
@@ -133,25 +144,40 @@ async def start_add_uchaskavoy(callback: types.CallbackQuery, state: FSMContext)
     mahalla_id = int(callback.data.split("_")[2])
     await state.update_data(mahalla_id=mahalla_id)
     await state.set_state(AddUchaskavoy.waiting_fio)
-    await callback.message.answer("👤 Profilaktika inspektori F.I.O.sini kiriting:")
+    await callback.message.answer("👤 Profilaktika inspektori F.I.O.sini kiriting:", reply_markup=cancel_kb())
 
 
 @router.message(AddUchaskavoy.waiting_fio)
 async def add_get_fio(message: types.Message, state: FSMContext):
+    if message.text == "⬅️ Orqaga qaytish":
+        await state.clear()
+        await message.answer("❌ Qo‘shish bekor qilindi.", reply_markup=types.ReplyKeyboardRemove())
+        return
+
     await state.update_data(fio=message.text)
     await state.set_state(AddUchaskavoy.waiting_phone)
-    await message.answer("📞 Telefon raqamini kiriting:")
+    await message.answer("📞 Telefon raqamini kiriting:", reply_markup=cancel_kb())
 
 
 @router.message(AddUchaskavoy.waiting_phone)
 async def add_get_phone(message: types.Message, state: FSMContext):
+    if message.text == "⬅️ Orqaga qaytish":
+        await state.clear()
+        await message.answer("❌ Qo‘shish bekor qilindi.", reply_markup=types.ReplyKeyboardRemove())
+        return
+
     await state.update_data(phone=message.text)
     await state.set_state(AddUchaskavoy.waiting_tg_id)
-    await message.answer("🆔 Telegram ID raqamini kiriting:")
+    await message.answer("🆔 Telegram ID raqamini kiriting:", reply_markup=cancel_kb())
 
 
 @router.message(AddUchaskavoy.waiting_tg_id)
 async def add_get_tg_id(message: types.Message, state: FSMContext):
+    if message.text == "⬅️ Orqaga qaytish":
+        await state.clear()
+        await message.answer("❌ Qo‘shish bekor qilindi.", reply_markup=types.ReplyKeyboardRemove())
+        return
+
     data = await state.get_data()
     add_uchaskavoy(
         fio=data["fio"],
@@ -160,7 +186,8 @@ async def add_get_tg_id(message: types.Message, state: FSMContext):
         mahalla_id=data["mahalla_id"]
     )
     await state.clear()
-    await message.answer("✅ Profilaktika inspektori muvaffaqiyatli qo‘shildi!")
+    await message.answer("✅ Profilaktika inspektori muvaffaqiyatli qo‘shildi!",
+                         reply_markup=types.ReplyKeyboardRemove())
 
 
 # --- O‘zgartirish jarayoni ---
@@ -177,25 +204,40 @@ async def start_edit_uchaskavoy(callback: types.CallbackQuery, state: FSMContext
 
     await state.update_data(mahalla_id=mahalla_id)
     await state.set_state(EditUchaskavoy.waiting_fio)
-    await callback.message.answer(f"✏️ Yangi F.I.O. kiriting (hozirgi: {uchaskavoy[1]}):")
+    await callback.message.answer(f"✏️ Yangi F.I.O. kiriting (hozirgi: {uchaskavoy[1]}):", reply_markup=cancel_kb())
 
 
 @router.message(EditUchaskavoy.waiting_fio)
 async def edit_get_fio(message: types.Message, state: FSMContext):
+    if message.text == "⬅️ Orqaga qaytish":
+        await state.clear()
+        await message.answer("❌ O‘zgartirish bekor qilindi.", reply_markup=types.ReplyKeyboardRemove())
+        return
+
     await state.update_data(fio=message.text)
     await state.set_state(EditUchaskavoy.waiting_phone)
-    await message.answer("📞 Yangi telefon raqamini kiriting:")
+    await message.answer("📞 Yangi telefon raqamini kiriting:", reply_markup=cancel_kb())
 
 
 @router.message(EditUchaskavoy.waiting_phone)
 async def edit_get_phone(message: types.Message, state: FSMContext):
+    if message.text == "⬅️ Orqaga qaytish":
+        await state.clear()
+        await message.answer("❌ O‘zgartirish bekor qilindi.", reply_markup=types.ReplyKeyboardRemove())
+        return
+
     await state.update_data(phone=message.text)
     await state.set_state(EditUchaskavoy.waiting_tg_id)
-    await message.answer("🆔 Yangi Telegram ID kiriting:")
+    await message.answer("🆔 Yangi Telegram ID kiriting:", reply_markup=cancel_kb())
 
 
 @router.message(EditUchaskavoy.waiting_tg_id)
 async def edit_get_tg_id(message: types.Message, state: FSMContext):
+    if message.text == "⬅️ Orqaga qaytish":
+        await state.clear()
+        await message.answer("❌ O‘zgartirish bekor qilindi.", reply_markup=types.ReplyKeyboardRemove())
+        return
+
     data = await state.get_data()
     update_uchaskavoy(
         mahalla_id=data["mahalla_id"],
@@ -204,7 +246,7 @@ async def edit_get_tg_id(message: types.Message, state: FSMContext):
         tg_id=int(message.text)
     )
     await state.clear()
-    await message.answer("✅ Profilaktika inspektori yangilandi!")
+    await message.answer("✅ Profilaktika inspektori yangilandi!", reply_markup=types.ReplyKeyboardRemove())
 
 
 # --- O‘chirish ---
@@ -215,4 +257,4 @@ async def delete_uchaskavoy_cb(callback: types.CallbackQuery):
 
     mahalla_id = int(callback.data.split("_")[2])
     delete_uchaskavoy(mahalla_id)
-    await callback.message.answer("Profilaktika inspektori o‘chirildi.")
+    await callback.message.answer("🗑 Profilaktika inspektori o‘chirildi.")

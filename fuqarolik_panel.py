@@ -4,6 +4,7 @@ from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 from database import (
     get_user_role,
@@ -27,6 +28,8 @@ class FuqarolikRegister(StatesGroup):
     waiting_tuman = State()
     waiting_mahalla = State()
     registered = State()
+    telefon = State()
+    location = State()
 
 
 def normalize_phone(phone: str):
@@ -65,7 +68,9 @@ async def cmd_start(message: types.Message, state: FSMContext):
         await state.clear()
         await message.answer(
             "👋 Assalomu alaykum!\n"
-            "Fuqarolik tizimiga xush kelibsiz!\n\n"
+            "Mazkur bot sizning mahallangiz\n"
+            "yoki jamoangiz havfsizligini\n"
+            "ta'minlashga yordam berishi mumkin\n\n"
             "Iltimos, ismingizni kiriting:"
         )
         await state.set_state(FuqarolikRegister.waiting_name)
@@ -180,22 +185,19 @@ async def process_mahalla(callback: types.CallbackQuery, state: FSMContext):
 # === Murojaat yuborish (matn, media, ovoz, joylashuv) ===
 @router.message(FuqarolikRegister.registered)
 async def process_murojaat(message: types.Message, state: FSMContext):
-    # FSM dan olish o‘rniga — bazadan olish
     fuqaro = get_mahalla_by_tg_id(message.from_user.id)
     if not fuqaro:
         await message.answer("⚠️ Siz ro‘yxatdan o‘tmagansiz. Iltimos, /start buyrug‘ini bosing.")
         return
 
-    mahalla_id = fuqaro[0]  # get_mahalla_by_tg_id() mahalla_id qaytaradi deb hisoblaymiz
-
+    mahalla_id = fuqaro[0]
     uchaskavoy = get_uchaskavoy_by_mahalla(mahalla_id)
     if not uchaskavoy:
         await message.answer("⚠️ Ushbu mahallaga uchaskavoy biriktirilmagan.")
         return
 
-    # Murojaat turini aniqlash
+    # Murojaat ma’lumotini vaqtincha saqlaymiz (telefon va lokatsiya keyin so‘raladi)
     turi, content = None, None
-
     if message.text:
         turi, content = "text", message.text.strip()
     elif message.photo:
@@ -213,16 +215,77 @@ async def process_murojaat(message: types.Message, state: FSMContext):
         await message.answer("⚠️ Bu turdagi faylni qabul qilib bo‘lmaydi.")
         return
 
-    # foydalanuvchi nickname yoki ismni olish
+    await state.update_data(
+        uchaskavoy_id=uchaskavoy[0],
+        turi=turi,
+        content=content
+    )
+
+    # Keyingi bosqich — telefon raqamini so‘raymiz
+    await message.answer(
+        "📞 Iltimos, telefon raqamingizni yuboring.",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="📞 Telefon raqamni yuborish", request_contact=True)]],
+            resize_keyboard=True
+        )
+    )
+
+    await state.set_state(FuqarolikRegister.telefon)
+
+
+# 🔹 2. TELEFON RAQAMINI QABUL QILISH
+@router.message(FuqarolikRegister.telefon)
+async def process_telefon(message: types.Message, state: FSMContext):
+    if message.contact:
+        telefon = message.contact.phone_number
+    else:
+        telefon = message.text.strip()
+
+    await state.update_data(telefon=telefon)
+
+    await message.answer(
+        "📍 Endi lokatsiyangizni yuboring.",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="📍 Lokatsiyani yuborish", request_location=True)]],
+            resize_keyboard=True
+        )
+    )
+
+    await state.set_state(FuqarolikRegister.location)
+
+
+# 🔹 3. LOKATSIYANI QABUL QILISH VA MA’LUMOTLARNI BAZAGA YOZISH
+@router.message(FuqarolikRegister.location)
+async def process_location(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+
+    uchaskavoy_id = data.get("uchaskavoy_id")
+    turi = data.get("turi")
+    content = data.get("content")
+    telefon = data.get("telefon")
+
+    # Lokatsiyani olish
+    if message.location:
+        location = f"{message.location.latitude},{message.location.longitude}"
+    else:
+        location = None
+
     foydalanuvchi_nick = message.from_user.username or message.from_user.full_name
 
+    # 🔹 Bazaga yozish
     add_murojaat(
         foydalanuvchi_id=message.from_user.id,
         foydalanuvchi_nick=foydalanuvchi_nick,
-        uchaskavoy_id=uchaskavoy[0],
+        uchaskavoy_id=uchaskavoy_id,
         turi=turi,
         content=content,
+        telefon=telefon,
+        location=location
     )
 
-    await message.answer("✅ Murojaatingiz uchaskavoyga yuborildi. Rahmat!")
+    await message.answer(
+        "✅ Murojaatingiz uchaskavoyga yuborildi. Rahmat!",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
 
+    await state.clear()
