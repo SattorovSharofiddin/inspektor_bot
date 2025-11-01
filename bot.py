@@ -3,6 +3,8 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 import asyncio
 
+from aiogram.types import BotCommand
+
 from config import API_TOKEN
 from admin_panel import router as admin_router
 from uchaskavoy_panel import router as uchaskavoy_router
@@ -20,6 +22,11 @@ async def main():
     dp.include_router(admin_router)
     dp.include_router(uchaskavoy_router)
     dp.include_router(fuqarolik_router)  # 🔥 Muhim
+
+    await bot.set_my_commands([
+        BotCommand(command="start", description="🏠 Asosiy menyu"),
+        # BotCommand(command="help", description="ℹ️ Yordam olish")
+    ])
 
     print("🤖 Bot ishga tushdi!")
     await dp.start_polling(bot)

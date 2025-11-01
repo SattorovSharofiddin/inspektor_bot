@@ -412,7 +412,16 @@ def add_fuqarolar(fio: str, telefon: str, tg_id: int, mahalla_id: int, role):
 def get_fuqarolar_by_tg_id(tg_id: int):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT * FROM uchaskavoy WHERE tg_id = ? AND (role IS NULL OR role = '')", (tg_id,))
+    c.execute("SELECT * FROM uchaskavoy WHERE tg_id = ? AND role='uchaskavoy'", (tg_id,))
+    result = c.fetchone()
+    conn.close()
+    return result
+
+
+def get_fuqarolar_by_tg_id_2(tg_id: int):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT * FROM uchaskavoy WHERE tg_id = ? and (role is null or role = '')", (tg_id,))
     result = c.fetchone()
     conn.close()
     return result

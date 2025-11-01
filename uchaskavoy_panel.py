@@ -14,6 +14,7 @@ from database import (
 )
 from fuqarolik_panel import cmd_start
 import sqlite3
+import asyncio
 
 router = Router()
 
@@ -110,7 +111,6 @@ async def start_sending_message(message: types.Message, state: FSMContext):
     await state.set_state(UchaskavoySendMessage.waiting_content)
 
 
-
 # 🔹 FSM: Xabarni qabul qilish va barcha fuqarolarga yuborish
 @router.message(StateFilter(UchaskavoySendMessage.waiting_content))
 async def process_message(message: Message, state: FSMContext):
@@ -192,9 +192,9 @@ async def reply_to_message(callback: types.CallbackQuery, state: FSMContext):
 async def show_murojaatlar_menu(message: types.Message):
     uchaskavoy = get_uchaskavoy_by_tg_id(message.from_user.id)
     if not uchaskavoy:
-        await message.answer("❌ Siz uchaskavoy sifatida ro‘yxatdan o‘tmagansiz.")
+        await message.answer("❌ Siz profilaktika inspektori sifatida ro‘yxatdan o‘tmagansiz.")
         return
-
+    print(uchaskavoy)
     data = get_murojaatlar_by_uchaskavoy(uchaskavoy[0])
     if not data:
         await message.answer("📭 Hozircha hech kim murojaat yubormagan.")
@@ -245,39 +245,25 @@ async def show_user_murojaatlar(callback: types.CallbackQuery):
     for row in murojaatlar:
         murojaat_id, nick, turi, content, holat, telefon, location = row
 
-        # button matnini hozirgi holatga qarab aniqlaymiz:
-        # agar hozir 'kutilmoqda' bo'lsa — tugma "✅ Bajarildi" bo'ladi (ya'ni bosilganda bajarildi ga o'tadi)
-        # agar hozir 'bajarildi' bo'lsa — tugma "🕓 Kutilmoqda" bo'ladi
-        if holat == "kutilmoqda":
-            button_text = "✅ Bajarildi"
-        else:
-            button_text = "🕓 Kutilmoqda"
+        holat = holat or "kutilmoqda"
+        button_text = "✅ Bajarildi" if holat == "kutilmoqda" else "🕓 Kutilmoqda"
 
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [
-                    InlineKeyboardButton(text=button_text, callback_data=f"toggle_status:{murojaat_id}")
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="💬 Javob berish",
-                        callback_data=f"reply_to:{murojaat_id}"
-                    )
-                ]
+                [InlineKeyboardButton(text=button_text, callback_data=f"toggle_status:{murojaat_id}")],
+                [InlineKeyboardButton(text="💬 Javob berish", callback_data=f"reply_to:{murojaat_id}")]
             ]
         )
 
-        # Qo'shimcha ma'lumotlar
         info_text = f"<b>👤 Foydalanuvchi:</b> {nick}\n"
         if telefon:
             info_text += f"<b>📞 Telefon:</b> <a href='tel:{telefon}'>{telefon}</a>\n"
         if location:
             try:
                 lat, lon = location.split(",")
-                info_text += f"<b>📍 Joylashuv:</b> <a href='https://maps.google.com/?q={lat},{lon}'>Ko‘rish</a>\n"
+                info_text += f"<b>📍 Joylashuv:</b> <a href='https://maps.google.com/?q={lat},{lon}'>Ko'rish</a>\n"
             except:
                 pass
-
         info_text += f"\n<b>Holat:</b> {holat.capitalize()}\n__________________"
 
         try:
@@ -287,24 +273,174 @@ async def show_user_murojaatlar(callback: types.CallbackQuery):
                     parse_mode="HTML",
                     reply_markup=keyboard
                 )
-            elif turi == "photo":
-                await callback.message.answer_photo(photo=content, caption=info_text, parse_mode="HTML",
-                                                    reply_markup=keyboard)
-            elif turi == "video":
-                await callback.message.answer_video(video=content, caption=info_text, parse_mode="HTML",
-                                                    reply_markup=keyboard)
-            elif turi == "document":
-                await callback.message.answer_document(document=content, caption=info_text, parse_mode="HTML",
-                                                       reply_markup=keyboard)
-            elif turi == "voice":
-                await callback.message.answer_voice(voice=content, caption=info_text, parse_mode="HTML",
-                                                    reply_markup=keyboard)
-            else:
-                # agar noma'lum turi bo'lsa, matn sifatida yuboramiz
-                await callback.message.answer(f"{content}\n\n{info_text}", parse_mode="HTML", reply_markup=keyboard)
-        except Exception as e:
-            await callback.message.answer(f"⚠️ Xabar yuborishda xatolik: {e}")
 
+            elif turi in ["photo", "video", "document", "voice", "video_note"]:
+                # content ni to'g'ri parse qilish
+                file_ids = []
+                if content:
+                    try:
+                        # Agar content JSON string bo'lsa
+                        if isinstance(content, str) and content.startswith('['):
+                            import json
+                            file_ids = json.loads(content)
+                        else:
+                            # Oddiy string bo'lsa
+                            file_ids = [content]
+                    except:
+                        # Boshqa holatda
+                        file_ids = [content]
+
+                if not file_ids:
+                    await callback.message.answer(
+                        f"⚠️ {turi} mavjud emas\n\n{info_text}",
+                        parse_mode="HTML",
+                        reply_markup=keyboard
+                    )
+                    continue
+
+                # Video note uchun alohida yondashuv
+                if turi == "video_note":
+                    await handle_video_note_smart(callback, file_ids, info_text, keyboard, murojaat_id)
+                else:
+                    # Boshqa turlar uchun (photo, video, document, voice)
+                    await handle_media_files(callback, turi, file_ids, info_text, keyboard)
+
+            else:
+                await callback.message.answer(
+                    f"{content}\n\n{info_text}",
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+
+        except Exception as e:
+            await callback.message.answer(f"⚠️ Xabar yuborishda xatolik: {str(e)}")
+
+    await callback.answer()
+
+
+async def handle_media_files(callback: types.CallbackQuery, turi: str, file_ids: list, info_text: str,
+                             keyboard: InlineKeyboardMarkup):
+    """Photo, video, document, voice fayllarini yuborish"""
+    for i, file_id in enumerate(file_ids):
+        try:
+            caption = info_text if i == 0 else None
+            current_keyboard = keyboard if i == len(file_ids) - 1 else None
+
+            clean_file_id = file_id.strip().replace('"', '').replace("'", "")
+
+            if turi == "photo":
+                await callback.message.answer_photo(
+                    photo=clean_file_id,
+                    caption=caption,
+                    parse_mode="HTML",
+                    reply_markup=current_keyboard
+                )
+            elif turi == "video":
+                await callback.message.answer_video(
+                    video=clean_file_id,
+                    caption=caption,
+                    parse_mode="HTML",
+                    reply_markup=current_keyboard
+                )
+            elif turi == "document":
+                await callback.message.answer_document(
+                    document=clean_file_id,
+                    caption=caption,
+                    parse_mode="HTML",
+                    reply_markup=current_keyboard
+                )
+            elif turi == "voice":
+                await callback.message.answer_voice(
+                    voice=clean_file_id,
+                    caption=caption,
+                    parse_mode="HTML",
+                    reply_markup=current_keyboard
+                )
+
+            await asyncio.sleep(0.5)
+
+        except Exception as e:
+            await callback.message.answer(
+                f"⚠️ {turi} yuborishda xatolik: {str(e)}",
+                reply_markup=current_keyboard
+            )
+
+
+async def handle_video_note_smart(callback: types.CallbackQuery, file_ids: list, info_text: str,
+                                  keyboard: InlineKeyboardMarkup, murojaat_id: int):
+    """Video note larni aqlli usulda yuborish"""
+
+    # Avval barcha file_id larni sinab ko'ramiz
+    video_note_sent = False
+
+    for file_id in file_ids:
+        clean_file_id = file_id.strip().replace('"', '').replace("'", "")
+
+        # Turli xil formatlarni sinab ko'ramiz
+        formats_to_try = [
+            clean_file_id,  # Asl format
+            f"'{clean_file_id}'",  # Qo'shtirnoq bilan
+            f'"{clean_file_id}"',  # Double quote bilan
+        ]
+
+        # Agar DQAC bilan boshlansa, AWAC ga o'zgartirib ko'ramiz
+        if clean_file_id.startswith('DQAC'):
+            fixed_id = 'Aw' + clean_file_id[2:]
+            formats_to_try.append(fixed_id)
+
+        for format_id in formats_to_try:
+            try:
+                await callback.message.answer_video_note(video_note=format_id)
+                video_note_sent = True
+                print(f"SUCCESS: Video note yuborildi with format: {format_id[:20]}...")
+                break  # Muvaffaqiyatli bo'lsa, keyingi file_id ga o'tamiz
+            except Exception as e:
+                print(f"DEBUG: Format {format_id[:20]}... failed: {e}")
+                continue
+
+        if video_note_sent:
+            await asyncio.sleep(1)
+
+    # Agar hech qaysi video note yuborilmagan bo'lsa
+    if not video_note_sent:
+        # Foydalanuvchiga video note borligini, lekin yuborish mumkin emasligini aytamiz
+        refresh_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Video note ni yangilash",
+                                      callback_data=f"refresh_video:{murojaat_id}")],
+                [InlineKeyboardButton(text="📞 Foydalanuvchi bilan bog'lanish",
+                                      url=f"tg://user?id={callback.from_user.id}")]
+            ]
+        )
+
+        await callback.message.answer(
+            f"🎥 <b>Video Note Murojaati</b>\n\n"
+            f"⚠️ <i>Video note ni ko'rsatish mumkin emas. File ID eskirgan.</i>\n\n"
+            f"{info_text}",
+            parse_mode="HTML",
+            reply_markup=refresh_keyboard
+        )
+        return
+
+    # Agar video note yuborilgan bo'lsa, info text yuboramiz
+    await callback.message.answer(
+        f"🎥 Video Note\n\n{info_text}",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+
+
+# Video note ni yangilash uchun handler
+@router.callback_query(lambda c: c.data.startswith("refresh_video:"))
+async def refresh_video_note(callback: types.CallbackQuery):
+    murojaat_id = int(callback.data.split(":")[1])
+
+    await callback.message.answer(
+        f"🔄 Video note #{murojaat_id} ni yangilash uchun:\n\n"
+        f"1. Foydalanuvchiga yangi video note yuborishni so'rang\n"
+        f"2. Yangi video note qabul qilingach, eski murojaatni o'chiring\n"
+        f"3. Yangi murojaat avtomatik ravishda yangi file_id bilan saqlanadi"
+    )
     await callback.answer()
 
 
