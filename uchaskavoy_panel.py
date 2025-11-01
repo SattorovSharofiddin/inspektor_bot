@@ -58,7 +58,7 @@ async def user_start(message: types.Message, state: FSMContext):
     if role == "uchaskavoy":
         uchaskavoy = get_uchaskavoy_by_tg_id(message.from_user.id)
         if not uchaskavoy:
-            await message.answer("❌ Siz uchaskavoy sifatida ro‘yxatdan o‘tmagansiz.")
+            await message.answer("❌ Siz profilaktika inspektori  sifatida ro‘yxatdan o‘tmagansiz.")
             return
 
         await message.answer(
@@ -80,7 +80,7 @@ async def user_start(message: types.Message, state: FSMContext):
 async def refresh_panel(message: types.Message):
     uchaskavoy = get_uchaskavoy_by_tg_id(message.from_user.id)
     if not uchaskavoy:
-        await message.answer("❌ Siz uchaskavoy sifatida ro‘yxatdan o‘tmagansiz.")
+        await message.answer("❌ Siz profilaktika inspektori sifatida ro‘yxatdan o‘tmagansiz.")
         return
 
     await message.answer(
@@ -96,7 +96,7 @@ async def refresh_panel(message: types.Message):
 async def start_sending_message(message: types.Message, state: FSMContext):
     uchaskavoy = get_uchaskavoy_by_tg_id(message.from_user.id)
     if not uchaskavoy:
-        await message.answer("❌ Siz uchaskavoy sifatida ro‘yxatdan o‘tmagansiz.")
+        await message.answer("❌ Siz profilaktika inspektori sifatida ro‘yxatdan o‘tmagansiz.")
         return
 
     await message.answer(
@@ -148,15 +148,15 @@ async def process_message(message: Message, state: FSMContext):
         tg_id = f[2]
         try:
             if turi == "text":
-                await message.bot.send_message(chat_id=tg_id, text=f"📢 Uchaskavoydan xabar:\n\n{content}")
+                await message.bot.send_message(chat_id=tg_id, text=f"📢 Profilaktika inspektoridan xabar:\n\n{content}")
             elif turi == "photo":
-                await message.bot.send_photo(chat_id=tg_id, photo=content, caption="📢 Uchaskavoydan xabar")
+                await message.bot.send_photo(chat_id=tg_id, photo=content, caption="📢 Profilaktika inspektoridan xabar")
             elif turi == "video":
-                await message.bot.send_video(chat_id=tg_id, video=content, caption="📢 Uchaskavoydan xabar")
+                await message.bot.send_video(chat_id=tg_id, video=content, caption="📢 Profilaktika inspektoridan xabar")
             elif turi == "document":
-                await message.bot.send_document(chat_id=tg_id, document=content, caption="📢 Uchaskavoydan xabar")
+                await message.bot.send_document(chat_id=tg_id, document=content, caption="📢 Profilaktika inspektoridan xabar")
             elif turi == "voice":
-                await message.bot.send_voice(chat_id=tg_id, voice=content, caption="📢 Uchaskavoydan xabar")
+                await message.bot.send_voice(chat_id=tg_id, voice=content, caption="📢 Profilaktika inspektoridan xabar")
             sent_count += 1
         except Exception as e:
             print(f"Xabar yuborilmadi {tg_id}: {e}")
@@ -194,7 +194,7 @@ async def show_murojaatlar_menu(message: types.Message):
     if not uchaskavoy:
         await message.answer("❌ Siz profilaktika inspektori sifatida ro‘yxatdan o‘tmagansiz.")
         return
-    print(uchaskavoy)
+
     data = get_murojaatlar_by_uchaskavoy(uchaskavoy[0])
     if not data:
         await message.answer("📭 Hozircha hech kim murojaat yubormagan.")
@@ -232,7 +232,7 @@ async def show_user_murojaatlar(callback: types.CallbackQuery):
               SELECT id, foydalanuvchi_nick, turi, content, holat, telefon, location
               FROM murojaatlar
               WHERE foydalanuvchi_id = ?
-              ORDER BY id DESC
+              ORDER BY id
               """, (foydalanuvchi_id,))
     murojaatlar = c.fetchall()
     conn.close()
@@ -546,35 +546,35 @@ async def process_reply_message(message: types.Message, state: FSMContext):
         if message.text:
             await message.bot.send_message(
                 chat_id=foydalanuvchi_id,
-                text=f"💬 <b>Uchaskavoydan javob:</b>\n\n{message.text}",
+                text=f"💬 <b>Profilaktika inspektoridan javob:</b>\n\n{message.text}",
                 parse_mode="HTML"
             )
         elif message.photo:
             await message.bot.send_photo(
                 chat_id=foydalanuvchi_id,
                 photo=message.photo[-1].file_id,
-                caption="💬 <b>Uchaskavoydan javob:</b>",
+                caption="💬 <b>Profilaktika inspektoridan javob:</b>",
                 parse_mode="HTML"
             )
         elif message.video:
             await message.bot.send_video(
                 chat_id=foydalanuvchi_id,
                 video=message.video.file_id,
-                caption="💬 <b>Uchaskavoydan javob:</b>",
+                caption="💬 <b>Profilaktika inspektoridan javob:</b>",
                 parse_mode="HTML"
             )
         elif message.document:
             await message.bot.send_document(
                 chat_id=foydalanuvchi_id,
                 document=message.document.file_id,
-                caption="💬 <b>Uchaskavoydan javob:</b>",
+                caption="💬 <b>Profilaktika inspektoridan javob:</b>",
                 parse_mode="HTML"
             )
         elif message.voice:
             await message.bot.send_voice(
                 chat_id=foydalanuvchi_id,
                 voice=message.voice.file_id,
-                caption="💬 <b>Uchaskavoydan javob:</b>",
+                caption="💬 <b>Profilaktika inspektoridan javob:</b>",
                 parse_mode="HTML"
             )
         else:

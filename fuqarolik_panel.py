@@ -4,8 +4,9 @@ from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
+# from main_bot import bot
 from database import (
     get_user_role,
     add_fuqarolar,
@@ -39,7 +40,6 @@ main_menu = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
-
 
 def normalize_phone(phone: str):
     # Faqat raqamlarni qoldiramiz
@@ -297,7 +297,7 @@ async def process_murojaat(message: types.Message, state: FSMContext):
         return
     # 🔹 FSM ma’lumotni vaqtincha saqlaymiz
     await state.update_data(
-        uchaskavoy_id=uchaskavoy[3],
+        uchaskavoy_id=uchaskavoy[0],
         turi=turi,
         content=content
     )
@@ -321,6 +321,9 @@ async def process_murojaat(message: types.Message, state: FSMContext):
 @router.message(FuqarolikRegister.telefon)
 async def process_telefon(message: types.Message, state: FSMContext):
     if message.text == "⬅️ Orqaga":
+        return
+    if not message.contact:
+        await message.answer("❌ Iltimos, faqat '📞 Telefon raqamni yuborish' tugmasidan foydalaning.")
         return
     if message.contact:
         telefon = message.contact.phone_number
@@ -348,8 +351,12 @@ async def process_location(message: types.Message, state: FSMContext):
     if message.text == "⬅️ Orqaga":
         return
 
-    data = await state.get_data()
+    if not message.location:
+        await message.answer("❌ Iltimos, faqat '📍 Lokatsiyani yuborish' tugmasidan foydalaning.")
+        return
 
+    data = await state.get_data()
+    print(data)
     uchaskavoy_id = data.get("uchaskavoy_id")
     turi = data.get("turi")
     content = data.get("content")
@@ -364,7 +371,7 @@ async def process_location(message: types.Message, state: FSMContext):
     foydalanuvchi_nick = message.from_user.username or message.from_user.full_name
 
     # 🔹 Bazaga yozish
-    add_murojaat(
+    m_id = add_murojaat(
         foydalanuvchi_id=message.from_user.id,
         foydalanuvchi_nick=foydalanuvchi_nick,
         uchaskavoy_id=uchaskavoy_id,
@@ -373,11 +380,85 @@ async def process_location(message: types.Message, state: FSMContext):
         telefon=telefon,
         location=location
     )
-
+    print(m_id)
     await message.answer(
         "✅ Murojaatingiz profilaktika inspektoriga yuborildi. Rahmat!\n"
         "Yangi murojaat yuborish uchun /start tugmasini bosing",
         reply_markup=types.ReplyKeyboardRemove()
     )
+    try:
+        fuqaro = get_mahalla_by_tg_id(message.from_user.id)
+        if not fuqaro:
+            await message.answer("⚠️ Sizning mahalla ma’lumotingiz topilmadi. /start ni qayta bosing.")
+            return
+
+        mahalla_id = fuqaro[0]
+        uchaskavoy = get_uchaskavoy_by_mahalla(mahalla_id)
+        print(uchaskavoy)
+
+        if uchaskavoy:
+            lat = message.location.latitude
+            lon = message.location.longitude
+            inspector_tg_id = uchaskavoy[3]  # tg_id ustuni
+            murojaat_text = (
+                f"📩 <b>Yangi murojaat!</b>\n\n"
+                f"👤 <b>Fuqaro:</b> @{foydalanuvchi_nick}\n"
+                f"📞 <b>Telefon:</b> {telefon}\n"
+                f"📍 <b>Joylashuv:</b> "
+                f"<a href='https://www.google.com/maps?q={lat},{lon}'>Ko‘rish</a>\n\n "
+                f"<b>Turi:</b> {turi}\n"
+            )
+            bot = message.bot
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="💬 Javob berish", callback_data=f"reply_to:{m_id}")]
+                ]
+            )
+            # reply_markup = InlineKeyboardMarkup(keyboard)
+            # Media turiga qarab yuborish
+            if turi == "text":
+                murojaat_text += f"📝 <b>Xabar:</b> {content}"
+                await bot.send_message(inspector_tg_id, murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+
+            elif turi == "photo":
+                await bot.send_photo(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+
+            elif turi == "video":
+                await bot.send_video(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+
+
+            elif turi == "video_note":
+                await bot.send_video_note(inspector_tg_id, content, reply_markup=keyboard)
+                murojaat_text = (
+                    f"📩 <b>Yangi murojaat!</b>\n\n"
+                    f"👤 <b>Fuqaro:</b> @{foydalanuvchi_nick}\n"
+                    f"📞 <b>Telefon:</b> {telefon}\n"
+                    f"📍 <b>Joylashuv:</b> "
+                    f"<a href='https://maps.google.com/?q={location}'>Ko‘rish</a>\n\n"
+                    f"<b>Turi:</b> Video 🎥"
+                )
+
+                await bot.send_message(inspector_tg_id, murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+
+            elif turi == "document":
+                await bot.send_document(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+
+            elif turi == "voice":
+                await bot.send_voice(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+
+
+            elif turi == "location":
+                lat = message.location.latitude
+                lon = message.location.longitude
+                content = (
+                    f"📍 <b>Joylashuv:</b> "
+                    f"<a href='https://www.google.com/maps?q={lat},{lon}'>Ko‘rish</a>"
+                )
+                await bot.send_message(inspector_tg_id, content, parse_mode="HTML", reply_markup=keyboard)
+
+
+
+    except Exception as e:
+        print(f"❌ Inspektorga yuborishda xato: {e}")
 
     await state.clear()

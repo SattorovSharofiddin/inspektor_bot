@@ -237,6 +237,7 @@ def get_uchaskavoy_by_mahalla(mahalla_id):
               SELECT id, fio, telefon, tg_id, role
               FROM uchaskavoy
               WHERE mahalla_id = ?
+                and role = 'uchaskavoy'
               """, (mahalla_id,))
     data = c.fetchone()
     conn.close()
@@ -280,9 +281,10 @@ def add_murojaat(foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, cont
                                        location)
               VALUES (?, ?, ?, ?, ?, ?, ?)
               ''', (foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, telefon, location))
-
+    murojaat_id = c.lastrowid
     conn.commit()
     conn.close()
+    return murojaat_id
 
 
 def get_murojaatlar_by_uchaskavoy(uchaskavoy_id):
