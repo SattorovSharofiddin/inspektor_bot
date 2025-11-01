@@ -516,6 +516,79 @@ async def toggle_status(callback: types.CallbackQuery):
 
     await callback.answer(f"✅ Holat '{yangi_holat}' deb o‘zgartirildi.")
 
+
+@router.message(StateFilter(UchaskavoyReply.waiting_reply))
+async def process_reply_message(message: types.Message, state: FSMContext):
+    """Uchaskavoy tomonidan fuqaroning murojaatiga javob yuborish"""
+    data = await state.get_data()
+    murojaat_id = data.get("murojaat_id")
+
+    if not murojaat_id:
+        await message.answer("⚠️ Xatolik: murojaat ID topilmadi.")
+        await state.clear()
+        return
+
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT foydalanuvchi_id, foydalanuvchi_nick FROM murojaatlar WHERE id = ?", (murojaat_id,))
+    row = c.fetchone()
+    conn.close()
+
+    if not row:
+        await message.answer("❌ Murojaat topilmadi.")
+        await state.clear()
+        return
+
+    foydalanuvchi_id, foydalanuvchi_nick = row
+
+    # 🔹 Xabar turini aniqlaymiz
+    try:
+        if message.text:
+            await message.bot.send_message(
+                chat_id=foydalanuvchi_id,
+                text=f"💬 <b>Uchaskavoydan javob:</b>\n\n{message.text}",
+                parse_mode="HTML"
+            )
+        elif message.photo:
+            await message.bot.send_photo(
+                chat_id=foydalanuvchi_id,
+                photo=message.photo[-1].file_id,
+                caption="💬 <b>Uchaskavoydan javob:</b>",
+                parse_mode="HTML"
+            )
+        elif message.video:
+            await message.bot.send_video(
+                chat_id=foydalanuvchi_id,
+                video=message.video.file_id,
+                caption="💬 <b>Uchaskavoydan javob:</b>",
+                parse_mode="HTML"
+            )
+        elif message.document:
+            await message.bot.send_document(
+                chat_id=foydalanuvchi_id,
+                document=message.document.file_id,
+                caption="💬 <b>Uchaskavoydan javob:</b>",
+                parse_mode="HTML"
+            )
+        elif message.voice:
+            await message.bot.send_voice(
+                chat_id=foydalanuvchi_id,
+                voice=message.voice.file_id,
+                caption="💬 <b>Uchaskavoydan javob:</b>",
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer("⚠️ Ushbu turdagi faylni yuborib bo‘lmaydi.")
+            return
+
+        # Javob yuborilgani haqida xabar
+        await message.answer(f"✅ Javob {foydalanuvchi_nick} foydalanuvchisiga yuborildi.")
+
+    except Exception as e:
+        await message.answer(f"❌ Xatolik yuz berdi: {e}")
+
+    await state.clear()
+
 # @router.callback_query(lambda c: c.data.startswith("toggle_status:"))
 # async def toggle_murojaat_status(callback: types.CallbackQuery):
 #     import sqlite3
