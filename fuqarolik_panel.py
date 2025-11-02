@@ -41,6 +41,7 @@ main_menu = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+
 def normalize_phone(phone: str):
     # Faqat raqamlarni qoldiramiz
     digits = re.sub(r'\D', '', phone)
@@ -331,7 +332,7 @@ async def process_telefon(message: types.Message, state: FSMContext):
         telefon = message.text.strip()
 
     await state.update_data(telefon=telefon)
-
+    # g'oya telefon, raqamni kiritishni hoxlashi yoki hohlamasligi haqida inline keyboard qo'shish
     await message.answer(
         "📍 Endi lokatsiyangizni yuboring.",
         reply_markup=ReplyKeyboardMarkup(
@@ -339,6 +340,7 @@ async def process_telefon(message: types.Message, state: FSMContext):
                       [KeyboardButton(text="⬅️ Orqaga")]],
 
             resize_keyboard=True
+
         )
     )
 
@@ -421,10 +423,12 @@ async def process_location(message: types.Message, state: FSMContext):
                 await bot.send_message(inspector_tg_id, murojaat_text, parse_mode="HTML", reply_markup=keyboard)
 
             elif turi == "photo":
-                await bot.send_photo(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+                await bot.send_photo(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
+                                     reply_markup=keyboard)
 
             elif turi == "video":
-                await bot.send_video(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+                await bot.send_video(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
+                                     reply_markup=keyboard)
 
 
             elif turi == "video_note":
@@ -441,10 +445,12 @@ async def process_location(message: types.Message, state: FSMContext):
                 await bot.send_message(inspector_tg_id, murojaat_text, parse_mode="HTML", reply_markup=keyboard)
 
             elif turi == "document":
-                await bot.send_document(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+                await bot.send_document(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
+                                        reply_markup=keyboard)
 
             elif turi == "voice":
-                await bot.send_voice(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+                await bot.send_voice(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
+                                     reply_markup=keyboard)
 
 
             elif turi == "location":
