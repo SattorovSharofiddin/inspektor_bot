@@ -1,4 +1,5 @@
 import re
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 from aiogram import Router, F, types
 from aiogram.filters import Command
@@ -220,7 +221,6 @@ async def process_mahalla(callback: types.CallbackQuery, state: FSMContext):
     )
     await state.set_state(FuqarolikRegister.registered)
 
-
 @router.message(F.text == "⬅️ Orqaga")
 async def go_back(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
@@ -249,9 +249,7 @@ async def go_back(message: types.Message, state: FSMContext):
 
     else:
         await message.answer("🔙 Orqaga qaytish imkoni yo‘q bu bosqichda.")
-
-
-# === Murojaat yuborish (matn, media, ovoz, joylashuv) ===
+# === MUROJAATNI QABUL QILISH BOSQICHI ===
 @router.message(FuqarolikRegister.registered)
 async def process_murojaat(message: types.Message, state: FSMContext):
     fuqaro = get_mahalla_by_tg_id(message.from_user.id)
@@ -265,24 +263,15 @@ async def process_murojaat(message: types.Message, state: FSMContext):
         await message.answer("⚠️ Ushbu mahallaga profilaktika inspektori biriktirilmagan.")
         return
 
-    # 🔹 Sticker yuborilgan bo‘lsa, rad etamiz
-    if message.sticker:
-        await message.answer("❌ Sticker yuborish mumkin emas. Iltimos, matn yoki media yuboring.")
-        return
-
-    # 🔹 Murojaat turi va ma’lumotni aniqlaymiz
+    # 🔹 Murojaat turi aniqlanadi
     turi, content = None, None
     if message.text and message.text != "new_murojaat":
         turi, content = "text", message.text.strip()
     elif message.photo:
         turi, content = "photo", message.photo[-1].file_id
-    if message.text:
-        turi, content = "text", message.text.strip()
-    elif message.photo:
-        turi, content = "photo", message.photo[-1].file_id
     elif message.video:
         turi, content = "video", message.video.file_id
-    elif message.video_note:  # ✅ Yumaloq video (video note)
+    elif message.video_note:
         turi, content = "video_note", message.video_note.file_id
     elif message.document:
         turi, content = "document", message.document.file_id
@@ -291,89 +280,165 @@ async def process_murojaat(message: types.Message, state: FSMContext):
     elif message.location:
         turi, content = "location", f"{message.location.latitude},{message.location.longitude}"
 
-    # 🔹 Agar hech narsa mos kelmasa
     if not turi:
-        await message.answer(
-            "⚠️ Bu turdagi faylni qabul qilib bo‘lmaydi. Faqat matn, media, ovoz, lokatsiya yoki video yuboring.")
+        await message.answer("⚠️ Faqat matn, media, ovoz yoki joylashuv yuborish mumkin.")
         return
-    # 🔹 FSM ma’lumotni vaqtincha saqlaymiz
+
     await state.update_data(
         uchaskavoy_id=uchaskavoy[0],
         turi=turi,
         content=content
     )
 
-    # 🔹 Keyingi bosqich — telefon raqamini so‘raymiz
-    await message.answer(
-        "📞 Iltimos, telefon raqamingizni yuboring.",
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="📞 Telefon raqamni yuborish", request_contact=True)],
-                [KeyboardButton(text="⬅️ Orqaga")]
-            ],
-            resize_keyboard=True
-        )
+    # 🔹 3 ta tugmali menyu
+    markup = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📞 Telefon raqamni yuborish", request_contact=True)],
+            [KeyboardButton(text="⏭ Keyingi bosqich")],
+            [KeyboardButton(text="❌ Bekor qilish")]
+        ],
+        resize_keyboard=True
     )
 
-    await state.set_state(FuqarolikRegister.telefon)
+    await message.answer(
+        "📱 Telefon raqamingizni yuborishingiz mumkin, agar xohlasangiz keyingi bosqichga o‘ting:",
+        reply_markup=markup
+    )
+
+    await state.set_state(FuqarolikRegister.telefon)  # ✅ to‘g‘ri
+
 
 
 # 🔹 2. TELEFON RAQAMINI QABUL QILISH
 @router.message(FuqarolikRegister.telefon)
 async def process_telefon(message: types.Message, state: FSMContext):
+    # 🔙 Orqaga bosilganda
     if message.text == "⬅️ Orqaga":
+        await message.answer(
+            "📩 Murojaatingizni qaytadan yuborishingiz mumkin.",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+        await state.set_state(FuqarolikRegister.registered)
         return
-    if not message.contact:
-        await message.answer("❌ Iltimos, faqat '📞 Telefon raqamni yuborish' tugmasidan foydalaning.")
+
+    # ❌ Bekor qilish
+    if message.text == "❌ Bekor qilish":
+        await message.answer("❌ Murojaat bekor qilindi.", reply_markup=types.ReplyKeyboardRemove())
+        await state.clear()
         return
+
+    # ⏭ Keyingi bosqich — telefon kiritmasdan lokatsiyaga o'tadi
+    if message.text == "⏭ Keyingi bosqich":
+        await state.update_data(telefon=None)
+        await message.answer(
+            "📍 Lokatsiyangizni yuborishingiz mumkin, agar xohlasangiz murojaatni yakunlang:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="📍 Lokatsiyani yuborish", request_location=True)],
+                    [KeyboardButton(text="✅ Murojaatni yakunlash")],
+                    [KeyboardButton(text="❌ Bekor qilish")]
+                ],
+                resize_keyboard=True
+            )
+        )
+        await state.set_state(FuqarolikRegister.location)
+        return
+
+    # 📞 Telefon raqam yuborilgan holat
+    telefon = None
     if message.contact:
         telefon = message.contact.phone_number
-    else:
+    elif message.text and message.text.startswith("+998"):
         telefon = message.text.strip()
+    else:
+        await message.answer(
+            "📞 Telefon raqamingizni yuboring yoki '⏭ Keyingi bosqich' tugmasini bosing.",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="📞 Telefon raqamni yuborish", request_contact=True)],
+                    [KeyboardButton(text="⏭ Keyingi bosqich")],
+                    [KeyboardButton(text="❌ Bekor qilish")]
+                ],
+                resize_keyboard=True
+            )
+        )
+        return
 
+    # 🔸 Raqam saqlanadi va lokatsiya bosqichiga o‘tiladi
     await state.update_data(telefon=telefon)
-    # g'oya telefon, raqamni kiritishni hoxlashi yoki hohlamasligi haqida inline keyboard qo'shish
     await message.answer(
-        "📍 Endi lokatsiyangizni yuboring.",
+        "📍 Lokatsiyangizni yuborishingiz mumkin, agar xohlasangiz murojaatni yakunlang:",
         reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="📍 Lokatsiyani yuborish", request_location=True)],
-                      [KeyboardButton(text="⬅️ Orqaga")]],
-
+            keyboard=[
+                [KeyboardButton(text="📍 Lokatsiyani yuborish", request_location=True)],
+                [KeyboardButton(text="✅ Murojaatni yakunlash")],
+                [KeyboardButton(text="❌ Bekor qilish")]
+            ],
             resize_keyboard=True
-
         )
     )
-
     await state.set_state(FuqarolikRegister.location)
+
 
 
 # 🔹 3. LOKATSIYANI QABUL QILISH VA MA’LUMOTLARNI BAZAGA YOZISH
 @router.message(FuqarolikRegister.location)
 async def process_location(message: types.Message, state: FSMContext):
-    if message.text == "⬅️ Orqaga":
-        return
-
-    if not message.location:
-        await message.answer("❌ Iltimos, faqat '📍 Lokatsiyani yuborish' tugmasidan foydalaning.")
-        return
-
     data = await state.get_data()
-    print(data)
+    location = None
+
+    # 🔙 Orqaga bosilganda — telefon bosqichiga qaytadi
+    if message.text == "⬅️ Orqaga":
+        await message.answer(
+            "📞 Telefon raqamingizni kiriting:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="📞 Telefon raqamni yuborish", request_contact=True)],
+                    [KeyboardButton(text="⏭ Keyingi bosqich")],
+                    [KeyboardButton(text="❌ Bekor qilish")]
+                ],
+                resize_keyboard=True
+            )
+        )
+        await state.set_state(FuqarolikRegister.telefon)
+        return
+
+    # ❌ Bekor qilish
+    if message.text == "❌ Bekor qilish":
+        await message.answer("❌ Murojaat bekor qilindi.", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+        return
+
+    # ✅ Murojaatni yakunlash (lokatsiyasiz)
+    if message.text == "✅ Murojaatni yakunlash":
+        location = None
+
+    # 📍 Lokatsiya yuborilgan holat
+    elif message.location:
+        location = f"{message.location.latitude},{message.location.longitude}"
+
+    else:
+        await message.answer(
+            "📍 Lokatsiyani yuboring yoki '✅ Murojaatni yakunlash' tugmasini bosing.",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="📍 Lokatsiyani yuborish", request_location=True)],
+                    [KeyboardButton(text="✅ Murojaatni yakunlash")],
+                    [KeyboardButton(text="❌ Bekor qilish")]
+                ],
+                resize_keyboard=True
+            )
+        )
+        return
+
+    # 🔹 Murojaatni bazaga yozish
     uchaskavoy_id = data.get("uchaskavoy_id")
     turi = data.get("turi")
     content = data.get("content")
     telefon = data.get("telefon")
-
-    # Lokatsiyani olish
-    if message.location:
-        location = f"{message.location.latitude},{message.location.longitude}"
-    else:
-        location = None
-
     foydalanuvchi_nick = message.from_user.username or message.from_user.full_name
 
-    # 🔹 Bazaga yozish
-    m_id = add_murojaat(
+    m_id= add_murojaat(
         foydalanuvchi_id=message.from_user.id,
         foydalanuvchi_nick=foydalanuvchi_nick,
         uchaskavoy_id=uchaskavoy_id,
@@ -468,3 +533,13 @@ async def process_location(message: types.Message, state: FSMContext):
         print(f"❌ Inspektorga yuborishda xato: {e}")
 
     await state.clear()
+
+    await message.answer(
+        "✅ Murojaatingiz profilaktika inspektoriga yuborildi.\n"
+        "Rahmat! Yana murojaat yuborishingiz mumkin.",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+    # 🔹 Holatni qayta boshlaymiz — fuqaro yangi murojaat yuborishi mumkin
+    await state.set_state(FuqarolikRegister.registered)
+
