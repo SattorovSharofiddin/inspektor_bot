@@ -154,7 +154,8 @@ async def process_message(message: Message, state: FSMContext):
             elif turi == "video":
                 await message.bot.send_video(chat_id=tg_id, video=content, caption="📢 Profilaktika inspektoridan xabar")
             elif turi == "document":
-                await message.bot.send_document(chat_id=tg_id, document=content, caption="📢 Profilaktika inspektoridan xabar")
+                await message.bot.send_document(chat_id=tg_id, document=content,
+                                                caption="📢 Profilaktika inspektoridan xabar")
             elif turi == "voice":
                 await message.bot.send_voice(chat_id=tg_id, voice=content, caption="📢 Profilaktika inspektoridan xabar")
             sent_count += 1

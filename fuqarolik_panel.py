@@ -221,6 +221,7 @@ async def process_mahalla(callback: types.CallbackQuery, state: FSMContext):
     )
     await state.set_state(FuqarolikRegister.registered)
 
+
 @router.message(F.text == "⬅️ Orqaga")
 async def go_back(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
@@ -249,6 +250,8 @@ async def go_back(message: types.Message, state: FSMContext):
 
     else:
         await message.answer("🔙 Orqaga qaytish imkoni yo‘q bu bosqichda.")
+
+
 # === MUROJAATNI QABUL QILISH BOSQICHI ===
 @router.message(FuqarolikRegister.registered)
 async def process_murojaat(message: types.Message, state: FSMContext):
@@ -308,7 +311,6 @@ async def process_murojaat(message: types.Message, state: FSMContext):
     await state.set_state(FuqarolikRegister.telefon)  # ✅ to‘g‘ri
 
 
-
 # 🔹 2. TELEFON RAQAMINI QABUL QILISH
 @router.message(FuqarolikRegister.telefon)
 async def process_telefon(message: types.Message, state: FSMContext):
@@ -325,6 +327,7 @@ async def process_telefon(message: types.Message, state: FSMContext):
     if message.text == "❌ Bekor qilish":
         await message.answer("❌ Murojaat bekor qilindi.", reply_markup=types.ReplyKeyboardRemove())
         await state.clear()
+        await state.set_state(FuqarolikRegister.registered)
         return
 
     # ⏭ Keyingi bosqich — telefon kiritmasdan lokatsiyaga o'tadi
@@ -380,7 +383,6 @@ async def process_telefon(message: types.Message, state: FSMContext):
     await state.set_state(FuqarolikRegister.location)
 
 
-
 # 🔹 3. LOKATSIYANI QABUL QILISH VA MA’LUMOTLARNI BAZAGA YOZISH
 @router.message(FuqarolikRegister.location)
 async def process_location(message: types.Message, state: FSMContext):
@@ -407,6 +409,7 @@ async def process_location(message: types.Message, state: FSMContext):
     if message.text == "❌ Bekor qilish":
         await message.answer("❌ Murojaat bekor qilindi.", reply_markup=ReplyKeyboardRemove())
         await state.clear()
+        await state.set_state(FuqarolikRegister.registered)
         return
 
     # ✅ Murojaatni yakunlash (lokatsiyasiz)
@@ -438,7 +441,7 @@ async def process_location(message: types.Message, state: FSMContext):
     telefon = data.get("telefon")
     foydalanuvchi_nick = message.from_user.username or message.from_user.full_name
 
-    m_id= add_murojaat(
+    m_id = add_murojaat(
         foydalanuvchi_id=message.from_user.id,
         foydalanuvchi_nick=foydalanuvchi_nick,
         uchaskavoy_id=uchaskavoy_id,
@@ -464,15 +467,28 @@ async def process_location(message: types.Message, state: FSMContext):
         print(uchaskavoy)
 
         if uchaskavoy:
-            lat = message.location.latitude
-            lon = message.location.longitude
+            # location — bu funksiya boshida aniqlangan local o'zgaruvchi (string yoki None)
+            # message.location bo'lmasligi mumkin, shuning uchun local `location`ni ishlatamiz
+            lat, lon = None, None
+            if location:
+                # location odatda "lat,lon" ko'rinishida saqlangan
+                try:
+                    lat_str, lon_str = str(location).split(",")
+                    lat = lat_str.strip()
+                    lon = lon_str.strip()
+                except Exception:
+                    lat, lon = None, None
+
             inspector_tg_id = uchaskavoy[3]  # tg_id ustuni
+            foydalanuvchi_nick = message.from_user.username or message.from_user.full_name
+
+            # Bosh matn — joylashuv havolasi faqat mavjud bo'lsa qo'shiladi
+            loc_link = f"<a href='https://www.google.com/maps?q={lat},{lon}'>Ko‘rish</a>" if lat and lon else "Yo'q"
             murojaat_text = (
                 f"📩 <b>Yangi murojaat!</b>\n\n"
                 f"👤 <b>Fuqaro:</b> @{foydalanuvchi_nick}\n"
                 f"📞 <b>Telefon:</b> {telefon}\n"
-                f"📍 <b>Joylashuv:</b> "
-                f"<a href='https://www.google.com/maps?q={lat},{lon}'>Ko‘rish</a>\n\n "
+                f"📍 <b>Joylashuv:</b> {loc_link}\n\n"
                 f"<b>Turi:</b> {turi}\n"
             )
             bot = message.bot
@@ -481,13 +497,14 @@ async def process_location(message: types.Message, state: FSMContext):
                     [InlineKeyboardButton(text="💬 Javob berish", callback_data=f"reply_to:{m_id}")]
                 ]
             )
-            # reply_markup = InlineKeyboardMarkup(keyboard)
-            # Media turiga qarab yuborish
+
+            # media turiga qarab yuborish — content deb olingan qiymatdan foydalanamiz
             if turi == "text":
-                murojaat_text += f"📝 <b>Xabar:</b> {content}"
-                await bot.send_message(inspector_tg_id, murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+                full_text = murojaat_text + f"📝 <b>Xabar:</b> {content}"
+                await bot.send_message(inspector_tg_id, full_text, parse_mode="HTML", reply_markup=keyboard)
 
             elif turi == "photo":
+                # content — file_id
                 await bot.send_photo(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
                                      reply_markup=keyboard)
 
@@ -495,19 +512,14 @@ async def process_location(message: types.Message, state: FSMContext):
                 await bot.send_video(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
                                      reply_markup=keyboard)
 
-
             elif turi == "video_note":
+                # video_note odatda file_id bilan yuboriladi
                 await bot.send_video_note(inspector_tg_id, content, reply_markup=keyboard)
-                murojaat_text = (
-                    f"📩 <b>Yangi murojaat!</b>\n\n"
-                    f"👤 <b>Fuqaro:</b> @{foydalanuvchi_nick}\n"
-                    f"📞 <b>Telefon:</b> {telefon}\n"
-                    f"📍 <b>Joylashuv:</b> "
-                    f"<a href='https://maps.google.com/?q={location}'>Ko‘rish</a>\n\n"
-                    f"<b>Turi:</b> Video 🎥"
-                )
-
-                await bot.send_message(inspector_tg_id, murojaat_text, parse_mode="HTML", reply_markup=keyboard)
+                # agar joylashuv bo'lsa uni alohida xabar sifatida yuborish mumkin
+                if lat and lon:
+                    await bot.send_message(inspector_tg_id,
+                                           f"📍 <a href='https://www.google.com/maps?q={lat},{lon}'>Joyni ko'rish</a>",
+                                           parse_mode="HTML", reply_markup=keyboard)
 
             elif turi == "document":
                 await bot.send_document(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
@@ -517,17 +529,22 @@ async def process_location(message: types.Message, state: FSMContext):
                 await bot.send_voice(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
                                      reply_markup=keyboard)
 
-
             elif turi == "location":
-                lat = message.location.latitude
-                lon = message.location.longitude
-                content = (
-                    f"📍 <b>Joylashuv:</b> "
-                    f"<a href='https://www.google.com/maps?q={lat},{lon}'>Ko‘rish</a>"
-                )
-                await bot.send_message(inspector_tg_id, content, parse_mode="HTML", reply_markup=keyboard)
-
-
+                # content bu yerda "lat,lon" string ekan — to'g'ri formatda yuboramiz
+                if content and "," in content:
+                    try:
+                        lat_c, lon_c = content.split(",", 1)
+                        loc_msg = (
+                            f"📍 <b>Joylashuv:</b> "
+                            f"<a href='https://www.google.com/maps?q={lat_c.strip()},{lon_c.strip()}'>Ko‘rish</a>"
+                        )
+                        await bot.send_message(inspector_tg_id, loc_msg, parse_mode="HTML", reply_markup=keyboard)
+                    except Exception:
+                        # fallback: agar parsingda muammo bo'lsa oddiy matn yuborish
+                        await bot.send_message(inspector_tg_id, "📍 Joylashuv ma'lumotida xato.", reply_markup=keyboard)
+                else:
+                    await bot.send_message(inspector_tg_id, "📍 Joylashuv ma'lumotlari mavjud emas.",
+                                           reply_markup=keyboard)
 
     except Exception as e:
         print(f"❌ Inspektorga yuborishda xato: {e}")
@@ -542,4 +559,3 @@ async def process_location(message: types.Message, state: FSMContext):
 
     # 🔹 Holatni qayta boshlaymiz — fuqaro yangi murojaat yuborishi mumkin
     await state.set_state(FuqarolikRegister.registered)
-
