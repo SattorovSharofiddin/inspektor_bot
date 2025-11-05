@@ -90,7 +90,11 @@ async def cmd_start(message: types.Message, state: FSMContext):
             await message.answer(
                 "👋 Assalomu alaykum!\n"
                 "Mazkur bot sizning mahallangiz yoki jamoangiz xavfsizligini\n"
-                "ta'minlashga yordam beradi.\n\n"
+                "ta'minlashga yordam beradi.\n"
+                "Sizning xabaringiz va shaxsingiz mutlaqo sir saqlanadi."
+                "Xabaringiz faqatgina hudud profilaktika inspektoriga"
+                "yetkaziladi va shu orqali huquqbuzatliklarning barvaqt"
+                "oldini olinishi mumkin\n\n"
                 "Iltimos, ismingizni kiriting:"
             )
             await state.set_state(FuqarolikRegister.waiting_name)
@@ -451,11 +455,11 @@ async def process_location(message: types.Message, state: FSMContext):
         location=location
     )
     print(m_id)
-    await message.answer(
-        "✅ Murojaatingiz profilaktika inspektoriga yuborildi. Rahmat!\n"
-        "Yangi murojaat yuborish uchun /start tugmasini bosing",
-        reply_markup=types.ReplyKeyboardRemove()
-    )
+    # await message.answer(
+    #     "✅ Murojaatingiz profilaktika inspektoriga yuborildi. Rahmat!\n"
+    #     "Yangi murojaat yuborish uchun /start tugmasini bosing",
+    #     reply_markup=types.ReplyKeyboardRemove()
+    # )
     try:
         fuqaro = get_mahalla_by_tg_id(message.from_user.id)
         if not fuqaro:
