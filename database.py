@@ -2,6 +2,25 @@ import sqlite3
 
 DB_NAME = "inspektorbot.db"
 
+def delete_user_by_tg_id(tg_id: int):
+    import sqlite3
+    conn = sqlite3.connect("inspektorbot.db")
+    cur = conn.cursor()
+    cur.execute("DELETE FROM uchaskavoy WHERE tg_id = ?", (tg_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_all_users():
+    import sqlite3
+    conn = sqlite3.connect("inspektorbot.db")  # yoki sendagi fayl nomi
+    cur = conn.cursor()
+    cur.execute("SELECT tg_id FROM uchaskavoy")
+    data = cur.fetchall()
+    cur.close()
+    conn.close()
+    return data
 
 def create_tables():
     conn = sqlite3.connect(DB_NAME)

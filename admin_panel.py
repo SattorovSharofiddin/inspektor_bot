@@ -1,7 +1,8 @@
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-
+from aiogram.exceptions import TelegramForbiddenError
+from database import get_all_users
 from config import ADMIN_ID
 from database import (
     get_viloyatlar,
@@ -14,6 +15,79 @@ from database import (
 )
 
 router = Router()
+
+from aiogram import types, F
+from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
+from config import ADMIN_ID
+from database import get_all_users
+
+from database import delete_user_by_tg_id
+
+@router.message(F.text == "/logout")
+async def user_logout(message: types.Message):
+    tg_id = message.from_user.id
+    try:
+        delete_user_by_tg_id(tg_id)
+        await message.answer("🚪 Siz tizimdan chiqdingiz.\n"
+                             "Agar qayta kirishni xohlasangiz, /start buyrug‘ini bosing.")
+    except Exception as e:
+        print(f"Logout xatolik: {e}")
+        await message.answer("⚠️ Chiqishda xatolik yuz berdi. Keyinroq urinib ko‘ring.")
+
+
+@router.message(F.text == "/yangilash")
+async def send_update_to_all(message: types.Message):
+    if message.chat.id != ADMIN_ID:
+        await message.answer("⚠️ Siz admin emassiz.")
+        return
+
+    users = get_all_users()
+    total = len(users)
+    success = 0
+    failed = 0
+
+    await message.answer(f"🔄 Yangilash xabari yuborilmoqda...\n👥 Jami foydalanuvchi: {total}")
+
+    for user in users:
+        user_id = user[0]
+
+        # Faqat raqamli ID bo‘lsa yuboramiz
+        if not str(user_id).isdigit():
+            print(f"⚠️ Noto‘g‘ri ID: {user_id}")
+            failed += 1
+            continue
+
+        try:
+            await message.bot.send_message(
+                chat_id=int(user_id),
+                text="⚠️ Botga yangilash kiritildi.\n\nIltimos, /start tugmasini bosing 🔁"
+            )
+            success += 1
+
+        except TelegramForbiddenError:
+            # foydalanuvchi botni bloklagan bo‘lishi mumkin
+            print(f"🚫 Bloklagan foydalanuvchi: {user_id}")
+            failed += 1
+            continue
+
+        except TelegramBadRequest:
+            # chat not found yoki notog‘ri ID
+            print(f"❌ Chat topilmadi: {user_id}")
+            failed += 1
+            continue
+
+        except Exception as e:
+            print(f"⚠️ Xabar yuborishda xatolik ({user_id}): {e}")
+            failed += 1
+            continue
+
+    await message.answer(
+        f"✅ Tugadi!\n\n"
+        f"📨 Yuborilgan: {success}\n"
+        f"🚫 Yuborilmagan: {failed}\n"
+        f"👥 Jami bazada: {total}"
+    )
+
 
 
 # --- Klaviatura: Orqaga qaytish ---
