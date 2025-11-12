@@ -445,16 +445,6 @@ async def process_location(message: types.Message, state: FSMContext):
     telefon = data.get("telefon")
     foydalanuvchi_nick = message.from_user.username or message.from_user.full_name
 
-    m_id = add_murojaat(
-        foydalanuvchi_id=message.from_user.id,
-        foydalanuvchi_nick=foydalanuvchi_nick,
-        uchaskavoy_id=uchaskavoy_id,
-        turi=turi,
-        content=content,
-        telefon=telefon,
-        location=location
-    )
-    print(m_id)
     # await message.answer(
     #     "✅ Murojaatingiz profilaktika inspektoriga yuborildi. Rahmat!\n"
     #     "Yangi murojaat yuborish uchun /start tugmasini bosing",
@@ -482,73 +472,85 @@ async def process_location(message: types.Message, state: FSMContext):
                     lon = lon_str.strip()
                 except Exception:
                     lat, lon = None, None
+            for u in uchaskavoy:
+                inspector_tg_id = u[3]
+                m_id = add_murojaat(
+                    foydalanuvchi_id=message.from_user.id,
+                    foydalanuvchi_nick=foydalanuvchi_nick,
+                    uchaskavoy_id=inspector_tg_id,
+                    turi=turi,
+                    content=content,
+                    telefon=telefon,
+                    location=location
+                )
+                print(m_id)
+                # tg_id ustuni
+                foydalanuvchi_nick = message.from_user.username or message.from_user.full_name
 
-            inspector_tg_id = uchaskavoy[3]  # tg_id ustuni
-            foydalanuvchi_nick = message.from_user.username or message.from_user.full_name
+                # Bosh matn — joylashuv havolasi faqat mavjud bo'lsa qo'shiladi
+                loc_link = f"<a href='https://www.google.com/maps?q={lat},{lon}'>Ko‘rish</a>" if lat and lon else "Yo'q"
+                murojaat_text = (
+                    f"📩 <b>Yangi murojaat!</b>\n\n"
+                    f"👤 <b>Fuqaro:</b> @{foydalanuvchi_nick}\n"
+                    f"📞 <b>Telefon:</b> {telefon}\n"
+                    f"📍 <b>Joylashuv:</b> {loc_link}\n\n"
+                    f"<b>Turi:</b> {turi}\n"
+                )
+                bot = message.bot
+                keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="💬 Javob berish", callback_data=f"reply_to:{m_id}")]
+                    ]
+                )
 
-            # Bosh matn — joylashuv havolasi faqat mavjud bo'lsa qo'shiladi
-            loc_link = f"<a href='https://www.google.com/maps?q={lat},{lon}'>Ko‘rish</a>" if lat and lon else "Yo'q"
-            murojaat_text = (
-                f"📩 <b>Yangi murojaat!</b>\n\n"
-                f"👤 <b>Fuqaro:</b> @{foydalanuvchi_nick}\n"
-                f"📞 <b>Telefon:</b> {telefon}\n"
-                f"📍 <b>Joylashuv:</b> {loc_link}\n\n"
-                f"<b>Turi:</b> {turi}\n"
-            )
-            bot = message.bot
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text="💬 Javob berish", callback_data=f"reply_to:{m_id}")]
-                ]
-            )
+                # media turiga qarab yuborish — content deb olingan qiymatdan foydalanamiz
+                if turi == "text":
+                    full_text = murojaat_text + f"📝 <b>Xabar:</b> {content}"
+                    await bot.send_message(inspector_tg_id, full_text, parse_mode="HTML", reply_markup=keyboard)
 
-            # media turiga qarab yuborish — content deb olingan qiymatdan foydalanamiz
-            if turi == "text":
-                full_text = murojaat_text + f"📝 <b>Xabar:</b> {content}"
-                await bot.send_message(inspector_tg_id, full_text, parse_mode="HTML", reply_markup=keyboard)
+                elif turi == "photo":
+                    # content — file_id
+                    await bot.send_photo(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
+                                         reply_markup=keyboard)
 
-            elif turi == "photo":
-                # content — file_id
-                await bot.send_photo(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
-                                     reply_markup=keyboard)
+                elif turi == "video":
+                    await bot.send_video(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
+                                         reply_markup=keyboard)
 
-            elif turi == "video":
-                await bot.send_video(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
-                                     reply_markup=keyboard)
+                elif turi == "video_note":
+                    # video_note odatda file_id bilan yuboriladi
+                    await bot.send_video_note(inspector_tg_id, content, reply_markup=keyboard)
+                    # agar joylashuv bo'lsa uni alohida xabar sifatida yuborish mumkin
+                    if lat and lon:
+                        await bot.send_message(inspector_tg_id,
+                                               f"📍 <a href='https://www.google.com/maps?q={lat},{lon}'>Joyni ko'rish</a>",
+                                               parse_mode="HTML", reply_markup=keyboard)
 
-            elif turi == "video_note":
-                # video_note odatda file_id bilan yuboriladi
-                await bot.send_video_note(inspector_tg_id, content, reply_markup=keyboard)
-                # agar joylashuv bo'lsa uni alohida xabar sifatida yuborish mumkin
-                if lat and lon:
-                    await bot.send_message(inspector_tg_id,
-                                           f"📍 <a href='https://www.google.com/maps?q={lat},{lon}'>Joyni ko'rish</a>",
-                                           parse_mode="HTML", reply_markup=keyboard)
+                elif turi == "document":
+                    await bot.send_document(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
+                                            reply_markup=keyboard)
 
-            elif turi == "document":
-                await bot.send_document(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
-                                        reply_markup=keyboard)
+                elif turi == "voice":
+                    await bot.send_voice(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
+                                         reply_markup=keyboard)
 
-            elif turi == "voice":
-                await bot.send_voice(inspector_tg_id, content, caption=murojaat_text, parse_mode="HTML",
-                                     reply_markup=keyboard)
-
-            elif turi == "location":
-                # content bu yerda "lat,lon" string ekan — to'g'ri formatda yuboramiz
-                if content and "," in content:
-                    try:
-                        lat_c, lon_c = content.split(",", 1)
-                        loc_msg = (
-                            f"📍 <b>Joylashuv:</b> "
-                            f"<a href='https://www.google.com/maps?q={lat_c.strip()},{lon_c.strip()}'>Ko‘rish</a>"
-                        )
-                        await bot.send_message(inspector_tg_id, loc_msg, parse_mode="HTML", reply_markup=keyboard)
-                    except Exception:
-                        # fallback: agar parsingda muammo bo'lsa oddiy matn yuborish
-                        await bot.send_message(inspector_tg_id, "📍 Joylashuv ma'lumotida xato.", reply_markup=keyboard)
-                else:
-                    await bot.send_message(inspector_tg_id, "📍 Joylashuv ma'lumotlari mavjud emas.",
-                                           reply_markup=keyboard)
+                elif turi == "location":
+                    # content bu yerda "lat,lon" string ekan — to'g'ri formatda yuboramiz
+                    if content and "," in content:
+                        try:
+                            lat_c, lon_c = content.split(",", 1)
+                            loc_msg = (
+                                f"📍 <b>Joylashuv:</b> "
+                                f"<a href='https://www.google.com/maps?q={lat_c.strip()},{lon_c.strip()}'>Ko‘rish</a>"
+                            )
+                            await bot.send_message(inspector_tg_id, loc_msg, parse_mode="HTML", reply_markup=keyboard)
+                        except Exception:
+                            # fallback: agar parsingda muammo bo'lsa oddiy matn yuborish
+                            await bot.send_message(inspector_tg_id, "📍 Joylashuv ma'lumotida xato.",
+                                                   reply_markup=keyboard)
+                    else:
+                        await bot.send_message(inspector_tg_id, "📍 Joylashuv ma'lumotlari mavjud emas.",
+                                               reply_markup=keyboard)
 
     except Exception as e:
         print(f"❌ Inspektorga yuborishda xato: {e}")

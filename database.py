@@ -239,7 +239,7 @@ def get_uchaskavoy_by_mahalla(mahalla_id):
               WHERE mahalla_id = ?
                 and role = 'uchaskavoy'
               """, (mahalla_id,))
-    data = c.fetchone()
+    data = c.fetchall()
     conn.close()
 
     return data
@@ -271,19 +271,59 @@ def get_user_by_tg_id(tg_id):
 
 
 # --- MUROJAATLAR --- #
-
-def add_murojaat(foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, telefon=None, location=None):
+def add_murojaat(
+        foydalanuvchi_id,
+        foydalanuvchi_nick,
+        uchaskavoy_id,
+        turi,
+        content,
+        telefon,
+        location
+):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
 
+    # 2️⃣ Agar uchaskavoy_id tuple bo‘lsa — int qiymatga o‘tkazamiz
+    if isinstance(uchaskavoy_id, tuple):
+        if len(uchaskavoy_id) > 0:
+            uchaskavoy_id = uchaskavoy_id[0]
+        else:
+            uchaskavoy_id = None
+
+    # 3️⃣ Agar location tuple bo‘lsa — stringga aylantiramiz
+    if isinstance(location, tuple):
+        location = f"{location[0]},{location[1]}"
+    elif location is None:
+        location = ""
+
+    # 4️⃣ Bazaga yozish
     c.execute('''
-              INSERT INTO murojaatlar (foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, telefon,
-                                       location)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-              ''', (foydalanuvchi_id, foydalanuvchi_nick, uchaskavoy_id, turi, content, telefon, location))
+        INSERT INTO murojaatlar (
+            foydalanuvchi_id,
+            foydalanuvchi_nick,
+            uchaskavoy_id,
+            turi,
+            content,
+            telefon,
+            location
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        foydalanuvchi_id,
+        foydalanuvchi_nick,
+        uchaskavoy_id,
+        turi,
+        content,
+        telefon,
+        location
+    ))
+
+    # 5️⃣ ID ni olish va commit qilish
     murojaat_id = c.lastrowid
     conn.commit()
     conn.close()
+
+    print(f"✅ Murojaat bazaga qo‘shildi (id={murojaat_id})")
     return murojaat_id
 
 

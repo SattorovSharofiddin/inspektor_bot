@@ -169,7 +169,9 @@ async def process_message(message: Message, state: FSMContext):
             foydalanuvchi_nick=fio,
             uchaskavoy_id=uchaskavoy[0],
             turi=turi,
-            content=content
+            content=content,
+            telefon=None,
+            location=None
         )
 
     await message.answer(f"✅ Xabar {sent_count} fuqaroga yuborildi")
@@ -226,15 +228,16 @@ async def show_murojaatlar_menu(message: types.Message):
 @router.callback_query(lambda c: c.data.startswith("show_user_murojaatlar:"))
 async def show_user_murojaatlar(callback: types.CallbackQuery):
     foydalanuvchi_id = int(callback.data.split(":")[1])
+    uchaskavoy_tg_id = callback.from_user.id
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("""
               SELECT id, foydalanuvchi_nick, turi, content, holat, telefon, location
               FROM murojaatlar
-              WHERE foydalanuvchi_id = ?
+              WHERE foydalanuvchi_id = ? AND uchaskavoy_id = ?
               ORDER BY id
-              """, (foydalanuvchi_id,))
+              """, (foydalanuvchi_id, uchaskavoy_tg_id))
     murojaatlar = c.fetchall()
     conn.close()
 
